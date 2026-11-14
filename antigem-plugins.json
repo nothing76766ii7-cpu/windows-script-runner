@@ -1,0 +1,9 @@
+[
+  {
+    "path": ".",
+    "id": "com.vanta.windows-script-runner",
+    "name": "Windows Script Runner (Rust Edition)",
+    "version": "2.0.0",
+    "description": "Execute .bat, .cmd, .ps1, .vbs, .reg and other Windows-only scripts on Android using zero-dependency Rust binaries (bat2sh, reg_parser, wsr) and a Windows Explorer-style UI panel with vector icons."
+  }
+]
