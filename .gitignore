@@ -3,5 +3,5 @@
 /android/app/build/
 /android/app/src/main/jniLibs/
 *.apk
-*.keystore
+!android/app/release.keystore
 .DS_Store
