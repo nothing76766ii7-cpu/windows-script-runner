@@ -1,0 +1,92 @@
+name: Build Android APK & Rust Binaries
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-android-apk:
+    name: Compile Rust Engine & Package Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android NDK
+        run: |
+          NDK_PATH=$(ls -vd $ANDROID_HOME/ndk/* /usr/local/lib/android/sdk/ndk/* 2>/dev/null | tail -n 1)
+          if [ -z "$NDK_PATH" ] || [ ! -d "$NDK_PATH" ]; then
+            echo "Installing NDK via sdkmanager..."
+            yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;26.1.10909125"
+            NDK_PATH="$ANDROID_HOME/ndk/26.1.10909125"
+          fi
+          echo "ANDROID_NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
+          echo "NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
+          echo "Using Android NDK: $NDK_PATH"
+
+      - name: Install Rust Toolchain & Android Targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+
+      - name: Run Rust Unit Tests (VFS, BAT Transpiler, REG Parser, PE Inspector)
+        run: cargo test --release
+
+      - name: Compile Rust JNI Shared Libraries (arm64-v8a & x86_64)
+        run: |
+          cargo ndk -t arm64-v8a -t x86_64 -o android/app/src/main/jniLibs build --release --lib
+          ls -la android/app/src/main/jniLibs/arm64-v8a/
+          ls -la android/app/src/main/jniLibs/x86_64/
+
+      - name: Sync Web UI into Android Assets
+        run: |
+          mkdir -p android/app/src/main/assets
+          cp -f ui/index.html android/app/src/main/assets/index.html
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      - name: Build Debug & Release APKs with Gradle
+        run: ./gradlew assembleDebug assembleRelease --stacktrace
+
+      - name: Upload Compiled Android APK Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-script-runner-apk
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/apk/release/*.apk
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        with:
+          tag_name: v5.0.0
+          name: "Windows Script Runner v5.0.0"
+          body: "Automated Android APK build (v5.0.0) with Real SAF/MediaStore storage integration & Windows GUI display bridge."
+          draft: false
+          prerelease: false
+          files: |
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/apk/debug/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

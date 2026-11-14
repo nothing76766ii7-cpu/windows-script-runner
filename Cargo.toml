@@ -1,0 +1,30 @@
+[package]
+name = "windows-script-runner"
+version = "5.0.0"
+edition = "2021"
+authors = ["Rajdeep Yaduvanshi <vanta@antigem.dev>"]
+description = "Windows File System (C:/D:/Z:), Real Android SAF/MediaStore Storage Bridge, Windows GUI Display/Input Bridge, Batch/CMD Interpreter, and Honest PE Analyzer in pure Rust."
+license = "MIT"
+
+[lib]
+name = "wsr_jni"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "wsr"
+path = "src/main.rs"
+
+[[bin]]
+name = "bat2sh"
+path = "tools/bat2sh.rs"
+
+[[bin]]
+name = "reg_parser"
+path = "tools/reg_parser.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

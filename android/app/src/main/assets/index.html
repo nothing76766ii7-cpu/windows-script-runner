@@ -1,0 +1,2325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Windows Script Runner</title>
+<style>
+:root {
+  --accent:      #0078d4;
+  --accent-dark: #005a9e;
+  --accent-lite: #0a3d6b;
+  --bg:          #181818;
+  --surface:     #222222;
+  --surface2:    #2b2b2b;
+  --border:      #363636;
+  --text:        #f0f0f0;
+  --text2:       #a0a0a0;
+  --sidebar:     #1e1e1e;
+  --hover:       rgba(255,255,255,0.07);
+  --sel:         #0a3d6b;
+  --shadow:      0 10px 36px rgba(0,0,0,.45);
+  --r:           6px;
+  --r2:          4px;
+  --term-bg:     #0c0c0c;
+  --term-fg:     #d4d4d4;
+  --term-font:   12px;
+}
+body.theme-light {
+  --bg:          #f3f3f3;
+  --surface:     #ffffff;
+  --surface2:    #f7f7f7;
+  --border:      #d8d8d8;
+  --text:        #1a1a1a;
+  --text2:       #5c5c5c;
+  --sidebar:     #efefef;
+  --hover:       rgba(0,0,0,0.055);
+  --sel:         #cce4f7;
+  --accent-lite: #cce4f7;
+  --shadow:      0 8px 32px rgba(0,0,0,.18);
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;width:100%;overflow:hidden;}
+body{
+  font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+  font-size:13px; color:var(--text);
+  background:var(--bg);
+  display:flex; flex-direction:column;
+}
+
+svg.ico {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  flex-shrink: 0;
+  display: block;
+}
+svg.ico-sm { width: 13px; height: 13px; }
+svg.ico-lg { width: 18px; height: 18px; }
+
+button:focus-visible, input:focus-visible, textarea:focus-visible, .si:focus-visible, .frow:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ── HEADER (PRD Section 8.1) ── */
+.titlebar{
+  background:var(--surface); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:6px;
+  padding:4px 8px; min-height:48px; flex-shrink:0; user-select:none;
+}
+.nav-toggle{
+  min-width:44px; min-height:44px; display:flex; align-items:center; justify-content:center;
+  border:none; background:none; color:var(--text); border-radius:var(--r2); cursor:pointer;
+  transition:background .15s;
+}
+.nav-toggle:hover{background:var(--hover);}
+.titlebar-icon{color:var(--accent); display:flex; align-items:center;}
+.titlebar-title{
+  font-size:13px; font-weight:600; color:var(--text);
+  flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.rust-pill{
+  font-size:10px; font-weight:600; padding:2px 7px; border-radius:4px;
+  background:rgba(222,100,45,.16); color:#e06c38; border:1px solid rgba(222,100,45,.38);
+  white-space:nowrap; flex-shrink:0;
+}
+
+/* ── TOOLBAR WITH OVERFLOW MENU (PRD Section 9) ── */
+.toolbar{
+  background:var(--surface); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:2px; padding:3px 6px; min-height:48px;
+  flex-shrink:0; position:relative;
+}
+.tb{
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:4px 8px; cursor:pointer; border-radius:var(--r2);
+  gap:2px; min-width:48px; min-height:44px; transition:background .12s;
+  border:none; background:none; color:var(--text); flex-shrink:0;
+}
+.tb:hover:not(:disabled){background:var(--hover);}
+.tb:disabled{opacity:.38; cursor:not-allowed;}
+.tb .i{display:flex; align-items:center; justify-content:center; color:var(--accent);}
+.tb .l{font-size:10px; color:var(--text2); white-space:nowrap;}
+.ts{width:1px; height:26px; background:var(--border); margin:0 3px; flex-shrink:0;}
+.tb-more{margin-left:auto; display:none;}
+
+.overflow-menu{
+  position:fixed; top:96px; right:8px; background:var(--surface);
+  border:1px solid var(--border); border-radius:var(--r);
+  box-shadow:var(--shadow); min-width:225px; z-index:1200;
+  padding:4px 0; display:none;
+}
+.overflow-menu.vis{display:block;}
+.omi{
+  display:flex; align-items:center; gap:10px; width:100%;
+  padding:10px 14px; min-height:44px; border:none; background:none;
+  color:var(--text); font:inherit; font-size:12.5px; cursor:pointer; text-align:left;
+}
+.omi:hover{background:var(--hover);}
+.omi .i{color:var(--accent); display:flex; align-items:center;}
+
+@media (max-width: 680px) {
+  .tb-secondary, .ts-secondary { display:none; }
+  .tb-more { display:flex; }
+}
+
+/* ── ADDRESS BAR & SEARCH ── */
+.abar{
+  background:var(--surface); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:5px; padding:5px 8px; flex-shrink:0;
+  flex-wrap:wrap;
+}
+.nb{
+  min-width:34px; min-height:34px; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; border-radius:var(--r2); color:var(--text2);
+  transition:background .1s; border:none; background:none; flex-shrink:0;
+}
+.nb:hover:not(:disabled){background:var(--hover); color:var(--text);}
+.nb:disabled{opacity:.3; cursor:default;}
+.pbar{
+  flex:1; min-width:140px; display:flex; align-items:center;
+  background:var(--bg); border:1px solid var(--border);
+  border-radius:var(--r2); padding:0 8px; height:34px; cursor:text;
+  overflow-x:auto; overflow-y:hidden; scrollbar-width:none;
+}
+.pbar::-webkit-scrollbar{display:none;}
+.pinput{
+  width:100%; background:none; border:none; outline:none;
+  font:inherit; font-size:12.5px; color:var(--text); display:none;
+}
+.bcrumbs{display:flex; align-items:center; gap:2px; white-space:nowrap;}
+.crumb{
+  color:var(--text); cursor:pointer; padding:3px 6px;
+  border-radius:3px; font-size:12px; transition:background .1s;
+}
+.crumb:hover{background:var(--hover);}
+.csep{color:var(--text2); display:flex; align-items:center;}
+.sbar{
+  display:flex; align-items:center; gap:6px;
+  background:var(--bg); border:1px solid var(--border);
+  border-radius:var(--r2); padding:0 8px; height:34px; width:170px; color:var(--text2);
+}
+.sbar input{
+  background:none; border:none; outline:none;
+  font:inherit; font-size:12px; color:var(--text); width:100%;
+}
+@media (max-width: 480px) {
+  .sbar { width: 120px; }
+}
+
+/* ── MAIN WORKSPACE & COLLAPSIBLE DRAWER (PRD Section 8) ── */
+.main{
+  display:flex; flex:1; overflow:hidden; position:relative;
+}
+.drawer-scrim{
+  position:absolute; inset:0; background:rgba(0,0,0,.55);
+  z-index:800; opacity:0; pointer-events:none;
+  transition:opacity 200ms ease;
+}
+.drawer-scrim.vis{
+  opacity:1; pointer-events:auto;
+}
+
+.sidebar{
+  width:254px; max-width:84vw; background:var(--sidebar);
+  border-right:1px solid var(--border);
+  overflow-y:auto; overflow-x:hidden; flex-shrink:0; padding:6px 0;
+  scrollbar-width:thin; scrollbar-color:var(--border) transparent;
+  transition:transform 210ms cubic-bezier(0.2, 0, 0, 1), width 210ms cubic-bezier(0.2, 0, 0, 1);
+  z-index:900;
+}
+@media (min-width: 600px) {
+  body.nav-collapsed .sidebar {
+    width: 0;
+    border-right: none;
+    padding: 0;
+    overflow: hidden;
+  }
+}
+@media (max-width: 599px) {
+  .sidebar {
+    position:absolute; top:0; bottom:0; left:0;
+    box-shadow:var(--shadow);
+    transform:translateX(-102%);
+  }
+  body.nav-open-mobile .sidebar {
+    transform:translateX(0);
+  }
+}
+
+.sec-hdr{
+  display:flex; align-items:center; justify-content:space-between;
+  width:100%; padding:8px 12px 4px; border:none; background:none;
+  font-size:10.5px; font-weight:700; color:var(--text2);
+  text-transform:uppercase; letter-spacing:.5px; cursor:pointer;
+}
+.sec-hdr:hover{color:var(--text);}
+.sec-hdr .chev{transition:transform 180ms ease; display:flex; align-items:center;}
+.sec-group.collapsed .sec-items{display:none;}
+.sec-group.collapsed .sec-hdr .chev{transform:rotate(-90deg);}
+
+.si{
+  display:flex; align-items:center; gap:9px;
+  padding:7px 12px; min-height:44px; cursor:pointer; border-radius:4px; margin:1px 6px;
+  transition:background .1s; color:var(--text); user-select:none;
+}
+.si:hover{background:var(--hover);}
+.si.on{background:var(--sel);}
+.si .i{display:flex; align-items:center; justify-content:center; color:var(--text2);}
+.si.on .i{color:var(--accent);}
+.si .n{font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;}
+.si .sub{font-size:10px; color:var(--text2); display:block;}
+.filter-pill{
+  font-size:9.5px; padding:1px 5px; border-radius:3px;
+  background:var(--surface2); border:1px solid var(--border); color:var(--text2);
+}
+.real-tag{
+  font-size:9px; font-weight:700; padding:1px 5px; border-radius:3px;
+  background:rgba(46,160,67,.18); color:#3fb950; border:1px solid rgba(46,160,67,.4);
+}
+.unconn-tag{
+  font-size:9px; font-weight:600; padding:1px 5px; border-radius:3px;
+  background:rgba(217,119,6,.18); color:#f59e0b; border:1px solid rgba(217,119,6,.4);
+}
+
+/* ── CONTENT & SOURCE INDICATOR BANNER (PRD Section 20.2) ── */
+.content{
+  flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden;
+}
+.drive-banner{
+  background:var(--surface2); border-bottom:1px solid var(--border);
+  padding:5px 10px; font-size:11px; color:var(--text2);
+  display:flex; align-items:center; gap:8px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0;
+}
+.src-badge{
+  font-size:9.5px; font-weight:700; padding:1px 6px; border-radius:3px; flex-shrink:0;
+}
+.src-vfs  { background:rgba(0,120,212,.2); color:#58a6ff; border:1px solid rgba(0,120,212,.4); }
+.src-real { background:rgba(46,160,67,.2); color:#3fb950; border:1px solid rgba(46,160,67,.45); }
+
+.filter-chip-bar{
+  display:none; align-items:center; gap:6px; padding:4px 10px;
+  background:rgba(0,120,212,.14); border-bottom:1px solid var(--border); font-size:11.5px;
+}
+.filter-chip-bar.vis{display:flex;}
+
+.listwrap{flex:1; overflow-y:auto; overflow-x:hidden; scrollbar-width:thin; scrollbar-color:var(--border) transparent;}
+
+.lhdr{
+  display:grid; grid-template-columns:minmax(150px, 1fr) 85px 175px 115px;
+  padding:5px 10px; border-bottom:1px solid var(--border);
+  background:var(--surface); position:sticky; top:0; z-index:1;
+}
+.lhdr-col{
+  font-size:11px; font-weight:600; color:var(--text2); cursor:pointer;
+  padding:3px 6px; border-radius:3px; user-select:none;
+}
+.lhdr-col:hover{background:var(--hover); color:var(--text);}
+
+.frow{
+  display:grid; grid-template-columns:minmax(150px, 1fr) 85px 175px 115px;
+  padding:6px 10px; min-height:48px; border-radius:var(--r2); cursor:pointer;
+  align-items:center; transition:background .1s; margin:1px 4px;
+}
+.frow:hover{background:var(--hover);}
+.frow.sel{background:var(--sel);}
+.fname{display:flex; align-items:center; gap:9px; min-width:0; overflow:hidden;}
+.ficon{display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+.fname-text{min-width:0; flex:1; overflow:hidden;}
+.flabel-row{display:flex; align-items:center; gap:5px; overflow:hidden;}
+.flabel{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500;}
+.fmeta-mobile{
+  display:none; font-size:11px; color:var(--text2);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:1px;
+}
+
+.mbadge{
+  font-size:9px; font-weight:700; padding:1px 5px; border-radius:3px;
+  letter-spacing:.3px; flex-shrink:0; text-transform:uppercase;
+}
+.mb-interp { background:#0078d4; color:#fff; }
+.mb-native { background:#2ea043; color:#fff; }
+.mb-emul   { background:#8957e5; color:#fff; }
+.mb-anal   { background:rgba(217,119,6,.22); color:#f59e0b; border:1px solid rgba(217,119,6,.45); }
+.mb-unsup  { background:rgba(248,81,73,.16); color:#f85149; border:1px solid rgba(248,81,73,.35); }
+
+.fsize,.ftype,.fdate{
+  font-size:11.5px; color:var(--text2); padding:0 6px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.row-act{
+  display:none; min-width:34px; min-height:34px; align-items:center; justify-content:center;
+  border:none; background:none; color:var(--text2); border-radius:4px; cursor:pointer;
+}
+.row-act:hover{background:var(--hover); color:var(--text);}
+
+@media (max-width: 640px) {
+  .lhdr { grid-template-columns: 1fr 40px; }
+  .lhdr-col.col-size, .lhdr-col.col-type, .lhdr-col.col-date { display:none; }
+  .frow { grid-template-columns: 1fr 38px; padding: 6px 8px; }
+  .fsize, .ftype, .fdate { display:none; }
+  .fmeta-mobile { display:block; }
+  .row-act { display:flex; }
+}
+
+/* ── PERMISSION / CONNECT ANDROID STORAGE CARD (PRD Section 20.2 & 20.4) ── */
+.perm-card{
+  max-width:440px; margin:10px auto; padding:12px 14px;
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--r);
+  text-align:left; display:flex; flex-direction:column; gap:7px;
+}
+.perm-card h3{font-size:14px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:8px;}
+.perm-card p{font-size:12px; color:var(--text2); line-height:1.5;}
+.perm-note{
+  font-size:11px; color:#f59e0b; background:rgba(217,119,6,.12);
+  border:1px solid rgba(217,119,6,.35); padding:8px; border-radius:4px; line-height:1.45;
+}
+.perm-actions{display:flex; flex-wrap:wrap; gap:8px; margin-top:4px;}
+
+/* ── WINDOWS APPLICATION / GUI DISPLAY VIEW (PRD Section 19.2 & 19.3) ── */
+.gui-view{
+  position:fixed; inset:0; background:#101010; z-index:2500;
+  display:none; flex-direction:column; overflow:hidden;
+}
+.gui-view.vis{display:flex;}
+.gui-top-bar{
+  background:#1c1c1c; border-bottom:1px solid #333;
+  display:flex; align-items:center; gap:8px; padding:6px 10px; min-height:46px; flex-shrink:0;
+}
+.gui-status-badge{
+  font-size:10px; font-weight:700; padding:2px 7px; border-radius:3px;
+  background:rgba(0,120,212,.25); color:#58a6ff; border:1px solid rgba(0,120,212,.45);
+}
+.gui-win-switcher{
+  display:flex; gap:4px; overflow-x:auto; flex:1;
+}
+.gui-win-tab{
+  padding:4px 10px; border-radius:4px; background:#2a2a2a; color:#ddd;
+  font-size:11.5px; border:1px solid #3d3d3d; cursor:pointer; white-space:nowrap;
+}
+.gui-win-tab.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+.gui-viewport-wrap{
+  flex:1; position:relative; display:flex; align-items:center; justify-content:center;
+  overflow:hidden; background:#080808; touch-action:none;
+}
+.gui-canvas{
+  background:#141414; border:1px solid #2e2e2e; max-width:100%; max-height:100%;
+  transform-origin:center center; display:none;
+}
+.gui-lifecycle-card{
+  max-width:460px; width:92%; background:#1e1e1e; border:1px solid #383838;
+  border-radius:var(--r); padding:16px; color:#e0e0e0; display:flex; flex-direction:column; gap:10px;
+}
+.gui-step-list{
+  display:flex; flex-direction:column; gap:6px; font-size:12px; font-family:monospace;
+  background:#121212; padding:10px; border-radius:4px; border:1px solid #2b2b2b;
+}
+.gui-input-bar{
+  background:#1c1c1c; border-top:1px solid #333;
+  display:flex; align-items:center; gap:6px; padding:6px 8px; flex-wrap:wrap; flex-shrink:0;
+}
+.gui-key-btn{
+  padding:5px 9px; min-height:34px; border-radius:4px; border:1px solid #3a3a3a;
+  background:#262626; color:#e0e0e0; font-size:11px; font-weight:600; cursor:pointer;
+}
+.gui-key-btn.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+.gui-kbd-input{
+  flex:1; min-width:110px; padding:5px 8px; border-radius:4px;
+  border:1px solid #3a3a3a; background:#121212; color:#fff; font-size:12px;
+}
+
+/* ── RESIZABLE 3-STATE COMMAND PROMPT (PRD Section 9 & 10) ── */
+.term{
+  border-top:1px solid var(--border);
+  background:var(--term-bg); display:flex; flex-direction:column;
+  transition:height 180ms ease; flex-shrink:0;
+}
+.term.state-collapsed { height: 36px; }
+.term.state-half      { height: 205px; }
+.term.state-expanded  { height: 55vh; }
+
+.thdr{
+  display:flex; align-items:center; gap:6px;
+  padding:4px 8px; height:36px; background:#161616; flex-shrink:0; color:#bbb;
+  user-select:none;
+}
+.thdr-title{
+  display:flex; align-items:center; gap:6px; cursor:pointer;
+  font-size:11.5px; font-weight:600; color:#ccc; flex:1;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.job-pill{
+  font-size:10px; padding:1px 6px; border-radius:3px;
+  background:#262626; color:#9e9e9e; font-family:monospace;
+}
+.job-pill.running { background:rgba(0,120,212,.28); color:#58a6ff; }
+.tbtn{
+  min-width:28px; min-height:28px; padding:0 6px;
+  display:inline-flex; align-items:center; justify-content:center; gap:4px;
+  border:1px solid #303030; background:#1f1f1f; color:#ccc;
+  border-radius:3px; font-size:10.5px; cursor:pointer;
+}
+.tbtn:hover:not(:disabled){background:#2e2e2e; color:#fff;}
+.tbtn:disabled{opacity:.35; cursor:default;}
+.tbtn.stop-btn{border-color:#8b2626; background:#3a1515; color:#ff7b72;}
+
+.tout{
+  flex:1; overflow-y:auto; overflow-x:auto; padding:8px 10px;
+  font-family:'Cascadia Code','Consolas',monospace;
+  font-size:var(--term-font); line-height:1.55; user-select:text;
+}
+.lo{color:#d4d4d4; white-space:pre-wrap; word-break:break-word;}
+.le{color:#ff7b72; white-space:pre-wrap; word-break:break-word;}
+.li{color:#58a6ff; white-space:pre-wrap; word-break:break-word;}
+.lk{color:#3fb950; white-space:pre-wrap; word-break:break-word;}
+.lw{color:#e3b341; white-space:pre-wrap; word-break:break-word;}
+
+.tinrow{
+  display:flex; align-items:center; gap:4px; padding:4px 8px;
+  border-top:1px solid #262626; background:#111; flex-shrink:0;
+}
+.tprompt{
+  color:#58a6ff; font-family:monospace; font-size:11.5px;
+  max-width:42vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  user-select:none; flex-shrink:0;
+}
+.tinput{
+  flex:1; min-width:80px; background:none; border:none; outline:none;
+  color:#f0f0f0; font-family:'Cascadia Code',monospace; font-size:12.5px;
+  padding:4px 2px;
+}
+.trun-btn{
+  padding:4px 10px; border-radius:3px; border:none;
+  background:var(--accent); color:#fff; font-size:11px; font-weight:600; cursor:pointer;
+}
+
+/* ── STATUS BAR ── */
+.statbar{
+  background:var(--accent); color:#fff;
+  padding:3px 10px; display:flex; align-items:center; gap:10px;
+  font-size:11px; flex-shrink:0; overflow:hidden; white-space:nowrap;
+}
+.stat-path{
+  margin-left:auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  max-width:55vw;
+}
+
+/* ── CONTEXT MENU ── */
+.ctxmenu{
+  position:fixed; background:var(--surface);
+  border:1px solid var(--border); border-radius:var(--r);
+  box-shadow:var(--shadow); min-width:225px; z-index:1300;
+  padding:4px 0; display:none;
+}
+.ctxmenu.vis{display:block;}
+.ci{
+  display:flex; align-items:center; gap:10px;
+  padding:8px 12px; min-height:40px; cursor:pointer; font-size:12.5px;
+  transition:background .1s; color:var(--text);
+}
+.ci:hover{background:var(--hover);}
+.ci .i{display:flex; align-items:center; justify-content:center; width:16px;}
+.csep2{height:1px; background:var(--border); margin:4px 0;}
+.ci.red{color:#f85149;}
+.ci.blue{color:var(--accent); font-weight:600;}
+
+/* ── DIALOGS ── */
+.overlay{
+  position:fixed; inset:0; background:rgba(0,0,0,.58);
+  z-index:2000; align-items:center; justify-content:center; display:none; padding:12px;
+}
+.overlay.vis{display:flex;}
+.dlg{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--r);
+  box-shadow:var(--shadow); width:510px; max-width:96vw; max-height:90vh;
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.dlg-title{
+  background:var(--surface2); padding:10px 14px;
+  font-weight:600; font-size:13px;
+  border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:8px; flex-shrink:0;
+}
+.dlg-close{
+  margin-left:auto; width:32px; height:32px; display:flex; align-items:center; justify-content:center;
+  border:none; background:none; color:var(--text2); border-radius:4px; cursor:pointer;
+}
+.dlg-close:hover{background:#c42b1c; color:#fff;}
+.dlg-body{padding:14px; overflow-y:auto; flex:1;}
+.dlg-info{font-size:12px; color:var(--text2); margin-bottom:8px; word-break:break-all;}
+.dlg-preview{
+  background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:9px 10px;
+  font-family:'Cascadia Code',monospace; font-size:11.5px; color:var(--text);
+  margin-bottom:10px; word-break:break-word; white-space:pre-wrap; line-height:1.5;
+}
+.dlg-warn{
+  background:rgba(217,119,6,.14); border:1px solid rgba(217,119,6,.4);
+  color:#f59e0b; padding:8px 10px; border-radius:4px; font-size:11.5px; margin-bottom:10px;
+}
+.dlg-label{font-size:12px; color:var(--text2); display:block; margin-bottom:5px;}
+.dlg-args{
+  width:100%; padding:7px 9px; border:1px solid var(--border);
+  border-radius:var(--r2); background:var(--bg); color:var(--text);
+  font:inherit; outline:none;
+}
+.dlg-editor{
+  width:100%; height:260px; padding:8px; border:1px solid var(--border);
+  border-radius:var(--r2); background:var(--bg); color:var(--text);
+  font-family:'Cascadia Code',monospace; font-size:12px; line-height:1.5; resize:vertical;
+}
+.dlg-footer{
+  padding:10px 14px; display:flex; justify-content:flex-end; gap:8px;
+  border-top:1px solid var(--border); background:var(--surface2); flex-shrink:0;
+}
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  padding:6px 14px; min-height:36px; border-radius:var(--r2); cursor:pointer;
+  font:inherit; font-size:12px; font-weight:600; border:1px solid var(--border);
+  background:var(--surface); color:var(--text); transition:background .1s;
+}
+.btn:hover:not(:disabled){background:var(--hover);}
+.btn:disabled{opacity:.4; cursor:not-allowed;}
+.btn.pri{background:var(--accent); color:#fff; border-color:var(--accent);}
+.btn.pri:hover:not(:disabled){background:var(--accent-dark);}
+
+.pe-grid{
+  display:grid; grid-template-columns:130px 1fr; gap:6px 10px;
+  font-size:12px; margin-bottom:12px;
+}
+.pe-k{color:var(--text2); font-weight:600;}
+.pe-v{color:var(--text); font-family:monospace; word-break:break-all;}
+
+.empty{
+  display:flex; align-items:center; justify-content:center;
+  height:100%; flex-direction:column; gap:10px; color:var(--text2); padding:24px; text-align:center;
+}
+.spin{
+  width:22px; height:22px; border:2px solid var(--border);
+  border-top-color:var(--accent); border-radius:50%;
+  animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+
+<!-- HEADER WITH COLLAPSIBLE SIDEBAR TOGGLE -->
+<div class="titlebar">
+  <button class="nav-toggle" id="btn-nav-toggle" onclick="toggleSidebar()" aria-label="Show navigation" title="Toggle Navigation Drawer">
+    <svg class="ico ico-lg" viewBox="0 0 16 16"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/></svg>
+  </button>
+  <span class="titlebar-icon" id="ico-app"></span>
+  <span class="titlebar-title" id="win-title">Windows Script Runner</span>
+  <span class="rust-pill" id="engine-status">Rust VFS v5.0</span>
+</div>
+
+<!-- RESPONSIVE TOOLBAR WITH OVERFLOW MENU -->
+<div class="toolbar">
+  <button class="tb" onclick="goUp()" title="Parent Directory (Up)"><span class="i" id="tb-ico-up"></span><span class="l">Up</span></button>
+  <button class="tb" onclick="refresh()" title="Refresh Directory"><span class="i" id="tb-ico-ref"></span><span class="l">Refresh</span></button>
+  <div class="ts"></div>
+  <button class="tb" id="tb-run" onclick="runSelected()" title="Run Selected Script or Binary"><span class="i" id="tb-ico-run"></span><span class="l">Run</span></button>
+  <button class="tb" onclick="inspectSelected()" title="Analyze PE Header or Registry File"><span class="i" id="tb-ico-pe"></span><span class="l">Analyze</span></button>
+  <button class="tb tb-secondary" onclick="editSelected()" title="View / Edit Script"><span class="i" id="tb-ico-edit"></span><span class="l">Edit</span></button>
+  <button class="tb tb-secondary" onclick="newFile()" title="New Script or File"><span class="i" id="tb-ico-newfile"></span><span class="l">New File</span></button>
+  <button class="tb tb-secondary" onclick="newFolder()" title="New Folder"><span class="i" id="tb-ico-folder"></span><span class="l">New Folder</span></button>
+  <button class="tb tb-secondary" onclick="copyPath()" title="Copy Windows Path"><span class="i" id="tb-ico-copy"></span><span class="l">Copy Path</span></button>
+  <div class="ts ts-secondary"></div>
+  <button class="tb tb-secondary" onclick="connectRealAndroidFolder('custom')" title="Connect Real Android Folder (SAF)"><span class="i" id="tb-ico-saf"></span><span class="l">Connect Dir</span></button>
+  <button class="tb tb-secondary" onclick="checkEnv()" title="Check Runtimes & VFS Mounts"><span class="i" id="tb-ico-env"></span><span class="l">Runtimes</span></button>
+  <button class="tb tb-secondary" onclick="showHelp()" title="Compatibility Matrix & Help"><span class="i" id="tb-ico-help"></span><span class="l">Help</span></button>
+
+  <button class="tb tb-more" onclick="toggleOverflowMenu(event)" aria-label="More actions" title="More Actions">
+    <span class="i"><svg class="ico" viewBox="0 0 16 16"><circle cx="8" cy="3.2" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="12.8" r="1.2" fill="currentColor"/></svg></span>
+    <span class="l">More</span>
+  </button>
+</div>
+
+<!-- OVERFLOW MENU FOR MOBILE -->
+<div class="overflow-menu" id="overflow-menu">
+  <button class="omi" onclick="hideOverflow();editSelected()"><span class="i" data-svg="edit"></span> View / Edit File</button>
+  <button class="omi" onclick="hideOverflow();newFile()"><span class="i" data-svg="doc"></span> New Script / File</button>
+  <button class="omi" onclick="hideOverflow();newFolder()"><span class="i" data-svg="newfolder"></span> New Folder</button>
+  <button class="omi" onclick="hideOverflow();copyPath()"><span class="i" data-svg="copy"></span> Copy Windows Path</button>
+  <div class="csep2"></div>
+  <button class="omi" onclick="hideOverflow();connectRealAndroidFolder('downloads')"><span class="i" data-svg="phone"></span> Connect Android Folder (SAF)</button>
+  <button class="omi" onclick="hideOverflow();importSafFile()"><span class="i" data-svg="download"></span> Import File into VFS</button>
+  <button class="omi" onclick="hideOverflow();exportSelectedToAndroid()"><span class="i" data-svg="up"></span> Export Selected to Android</button>
+  <div class="csep2"></div>
+  <button class="omi" onclick="hideOverflow();checkEnv()"><span class="i" data-svg="checkenv"></span> Runtime Capabilities</button>
+  <button class="omi" onclick="hideOverflow();showHelp()"><span class="i" data-svg="help"></span> Format Support Matrix</button>
+</div>
+
+<!-- ADDRESS BAR -->
+<div class="abar">
+  <button class="nb" id="nb-back" onclick="goBack()" title="Back" aria-label="Navigate back">
+    <svg class="ico ico-sm" viewBox="0 0 16 16"><polyline points="10 3 5 8 10 13"/></svg>
+  </button>
+  <button class="nb" id="nb-fwd" onclick="goFwd()" title="Forward" aria-label="Navigate forward">
+    <svg class="ico ico-sm" viewBox="0 0 16 16"><polyline points="6 3 11 8 6 13"/></svg>
+  </button>
+  <div class="pbar" id="pbar" onclick="focusPath()" title="Click to edit Windows path">
+    <div class="bcrumbs" id="bcrumbs"></div>
+    <input class="pinput" id="pinput" onblur="blurPath()" onkeydown="pathKey(event)" aria-label="Windows directory path">
+  </div>
+  <div class="sbar">
+    <svg class="ico ico-sm" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
+    <input type="text" id="search" placeholder="Search files..." oninput="filterFiles()" aria-label="Search files">
+  </div>
+</div>
+
+<!-- MAIN WORKSPACE -->
+<div class="main">
+  <div class="drawer-scrim" id="drawer-scrim" onclick="closeMobileDrawer()"></div>
+
+  <!-- COLLAPSIBLE SIDEBAR (PRD Section 8 & Section 20.2/20.4) -->
+  <aside class="sidebar" id="sidebar" aria-label="File Manager Navigation">
+    <!-- SECTION 1: ANDROID STORAGE (REAL DEVICE FILES - PRD Section 20.2) -->
+    <div class="sec-group" id="sec-android">
+      <button class="sec-hdr" onclick="toggleSection('sec-android')">
+        <span>ANDROID STORAGE (REAL FILES)</span>
+        <span class="chev" data-svg="chevDown"></span>
+      </button>
+      <div class="sec-items">
+        <div class="si" id="si-real-dl" onclick="openRealAndroidSlot('downloads','C:\\Users\\Admin\\Downloads',this)">
+          <span class="i" data-svg="download"></span>
+          <div class="n">Downloads<span class="sub">Real Android Downloads</span></div>
+          <span class="unconn-tag" id="tag-slot-downloads">Connect</span>
+        </div>
+        <div class="si" id="si-real-doc" onclick="openRealAndroidSlot('documents','C:\\Users\\Admin\\Documents',this)">
+          <span class="i" data-svg="doc"></span>
+          <div class="n">Documents<span class="sub">SAF Authorized Folder</span></div>
+          <span class="unconn-tag" id="tag-slot-documents">Connect</span>
+        </div>
+        <div class="si" id="si-real-pic" onclick="openRealAndroidSlot('pictures','C:\\Users\\Admin\\Pictures',this)">
+          <span class="i" data-svg="monitor"></span>
+          <div class="n">Pictures<span class="sub">MediaStore / SAF Images</span></div>
+          <span class="unconn-tag" id="tag-slot-pictures">Connect</span>
+        </div>
+        <div class="si" id="si-real-mus" onclick="openRealAndroidSlot('music','C:\\Users\\Admin\\Music',this)">
+          <span class="i" data-svg="clock"></span>
+          <div class="n">Music<span class="sub">MediaStore / SAF Audio</span></div>
+          <span class="unconn-tag" id="tag-slot-music">Connect</span>
+        </div>
+        <div class="si" id="si-real-mov" onclick="openRealAndroidSlot('movies','C:\\Users\\Admin\\Movies',this)">
+          <span class="i" data-svg="play"></span>
+          <div class="n">Movies<span class="sub">MediaStore / SAF Video</span></div>
+          <span class="unconn-tag" id="tag-slot-movies">Connect</span>
+        </div>
+        <div class="si" onclick="connectRealAndroidFolder('custom')">
+          <span class="i" data-svg="newfolder"></span>
+          <div class="n">+ Add Android Folder<span class="sub">Grant SAF Directory Tree</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 2: THIS PC (WINDOWS VFS) -->
+    <div class="sec-group" id="sec-pc">
+      <button class="sec-hdr" onclick="toggleSection('sec-pc')">
+        <span>THIS PC (WINDOWS VFS)</span>
+        <span class="chev" data-svg="chevDown"></span>
+      </button>
+      <div class="sec-items">
+        <div class="si on" id="si-c" onclick="nav('C:\\Users\\Admin\\Desktop',true,this)"><span class="i" data-svg="drive"></span><div class="n">Local Disk (C:)<span class="sub">Virtual System VFS</span></div></div>
+        <div class="si" onclick="nav('C:\\Users\\Admin\\Desktop',true,this)"><span class="i" data-svg="monitor"></span><div class="n">VFS Desktop<span class="sub">C:\Users\Admin\Desktop</span></div></div>
+        <div class="si" onclick="nav('C:\\Windows\\System32',true,this)"><span class="i" data-svg="reg"></span><div class="n">C:\Windows\System32<span class="sub">Virtual System32</span></div></div>
+        <div class="si" onclick="nav('C:\\Program Files',true,this)"><span class="i" data-svg="folder"></span><div class="n">C:\Program Files<span class="sub">Virtual Programs</span></div></div>
+        <div class="si" onclick="nav('C:\\Temp',true,this)"><span class="i" data-svg="clock"></span><div class="n">C:\Temp (Staging)<span class="sub">SAF Execution Stage</span></div></div>
+        <div class="si" onclick="nav('Z:\\workspace',true,this)"><span class="i" data-svg="globe"></span><div class="n">POSIX Sandbox (Z:)<span class="sub">Isolated Linux Dir</span></div></div>
+      </div>
+    </div>
+
+    <!-- SECTION 3: FILTER BY TYPE -->
+    <div class="sec-group" id="sec-flt">
+      <button class="sec-hdr" onclick="toggleSection('sec-flt')">
+        <span>FILTER BY TYPE</span>
+        <span class="chev" data-svg="chevDown"></span>
+      </button>
+      <div class="sec-items">
+        <div class="si on" id="f-all" onclick="setTypeFilter(null,this)"><span class="i" data-svg="folder"></span><span class="n">All Files</span><span class="filter-pill">*.*</span></div>
+        <div class="si" id="f-bat" onclick="setTypeFilter('.bat',this)"><span class="i" data-svg="bat"></span><span class="n">Batch Scripts</span><span class="filter-pill">.bat/.cmd</span></div>
+        <div class="si" id="f-exe" onclick="setTypeFilter('.exe',this)"><span class="i" data-svg="binary"></span><span class="n">PE Binaries</span><span class="filter-pill">.exe/.dll</span></div>
+        <div class="si" id="f-reg" onclick="setTypeFilter('.reg',this)"><span class="i" data-svg="reg"></span><span class="n">Registry Files</span><span class="filter-pill">.reg</span></div>
+        <div class="si" id="f-ps1" onclick="setTypeFilter('.ps1',this)"><span class="i" data-svg="ps1"></span><span class="n">PowerShell</span><span class="filter-pill">.ps1</span></div>
+        <div class="si" id="f-vbs" onclick="setTypeFilter('.vbs',this)"><span class="i" data-svg="vbs"></span><span class="n">VBScript</span><span class="filter-pill">.vbs</span></div>
+        <div class="si" id="f-rs"  onclick="setTypeFilter('.rs',this)"><span class="i" data-svg="rust"></span><span class="n">Rust Source</span><span class="filter-pill">.rs</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- FILE LIST & CONSOLE PANE -->
+  <div class="content">
+    <div class="drive-banner" id="drive-banner">
+      <span class="src-badge src-vfs" id="src-kind-badge">VIRTUAL VFS</span>
+      <span id="drive-banner-text" style="overflow:hidden;text-overflow:ellipsis">C:\Users\Admin\Desktop -> Isolated App-Private Windows VFS</span>
+    </div>
+    <div class="filter-chip-bar" id="filter-chip-bar">
+      <span id="filter-chip-text">Active Filter: None</span>
+      <button class="btn" style="padding:2px 8px;min-height:24px;margin-left:auto" onclick="setTypeFilter(null,document.getElementById('f-all'))">Clear Filter</button>
+    </div>
+
+    <div class="lhdr">
+      <div class="lhdr-col" onclick="sortBy('name')">Name</div>
+      <div class="lhdr-col col-size" onclick="sortBy('size')">Size</div>
+      <div class="lhdr-col col-type" onclick="sortBy('format_label')">Format & Support</div>
+      <div class="lhdr-col col-date">Action</div>
+    </div>
+    <div class="listwrap">
+      <div id="filelist">
+        <div class="empty"><div class="spin"></div><span>Loading directory...</span></div>
+      </div>
+    </div>
+
+    <!-- RESIZABLE 3-STATE COMMAND PROMPT -->
+    <div class="term state-half" id="term">
+      <div class="thdr">
+        <div class="thdr-title" onclick="cycleTermHeight()" title="Cycle Console height">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><polyline points="4.5 6 7 8 4.5 10"/><line x1="8" y1="10" x2="11" y2="10"/></svg>
+          <span id="term-label">Command Prompt</span>
+        </div>
+        <span class="job-pill" id="job-pill">IDLE</span>
+        <button class="tbtn stop-btn" id="btn-stop-job" onclick="stopActiveJob()" disabled title="Cancel running job">Stop</button>
+        <button class="tbtn" onclick="changeTermFont(1)" title="Increase font size">A+</button>
+        <button class="tbtn" onclick="changeTermFont(-1)" title="Decrease font size">A-</button>
+        <button class="tbtn" onclick="copyTermOutput()" title="Copy console output">Copy</button>
+        <button class="tbtn" onclick="tclear()" title="Clear console (CLS)">Clear</button>
+        <button class="tbtn" onclick="cycleTermHeight()" id="term-tog" title="Resize console panel"></button>
+      </div>
+      <div class="tout" id="tout"></div>
+      <div class="tinrow">
+        <span class="tprompt" id="tprompt">C:\Users\Admin\Desktop&gt;</span>
+        <input class="tinput" id="tinput" placeholder="Enter Batch/CMD command (dir, set, ver, help)..." onkeydown="termKey(event)" autocomplete="off" spellcheck="false" aria-label="Command Prompt Input">
+        <button class="trun-btn" onclick="submitTermInput()">Run</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div class="statbar">
+  <span id="st-items">0 items</span>
+  <span id="st-sel"></span>
+  <span class="stat-path" id="st-path">C:\Users\Admin\Desktop</span>
+</div>
+
+<!-- CONTEXT MENU -->
+<div class="ctxmenu" id="ctxmenu">
+  <div class="ci blue" id="ctx-run" onclick="ctxRun()"><span class="i" data-svg="play"></span> Run Script / Launch</div>
+  <div class="ci" id="ctx-anal" onclick="ctxInspect()"><span class="i" data-svg="binary"></span> Analyze (PE / Registry)</div>
+  <div class="ci" onclick="ctxEdit()"><span class="i" data-svg="edit"></span> View / Edit Text</div>
+  <div class="csep2"></div>
+  <div class="ci" onclick="ctxImportVfs()"><span class="i" data-svg="download"></span> Stage / Import into Windows VFS</div>
+  <div class="ci" onclick="ctxExportAndroid()"><span class="i" data-svg="up"></span> Export to Android Folder (SAF)</div>
+  <div class="csep2"></div>
+  <div class="ci" onclick="ctxCopyPath()"><span class="i" data-svg="copy"></span> Copy Windows Path</div>
+  <div class="ci" onclick="ctxRename()"><span class="i" data-svg="edit"></span> Rename</div>
+  <div class="ci" onclick="ctxDuplicate()"><span class="i" data-svg="copy"></span> Duplicate File</div>
+  <div class="ci" onclick="ctxProps()"><span class="i" data-svg="info"></span> File Details & Mapping</div>
+  <div class="csep2"></div>
+  <div class="ci red" onclick="ctxDelete()"><span class="i" data-svg="trash"></span> Delete</div>
+</div>
+
+<!-- WINDOWS APPLICATION / GUI DISPLAY SURFACE VIEW (PRD Section 19) -->
+<div class="gui-view" id="gui-view">
+  <div class="gui-top-bar">
+    <span class="gui-status-badge" id="gui-state-badge">ANALYZING</span>
+    <div class="gui-win-switcher" id="gui-win-switcher"></div>
+    <button class="gui-key-btn" id="btn-ptr-mode" onclick="togglePointerMode()" title="Toggle Direct Touch vs Trackpad Pointer">Mode: Touch</button>
+    <button class="gui-key-btn" onclick="resetGuiZoom()" title="Reset Viewport Zoom">100%</button>
+    <button class="gui-key-btn" style="background:#8b2626;border-color:#a83232" onclick="terminateCurrentGuiSession()">Terminate</button>
+    <button class="gui-key-btn" onclick="closeGuiView()">Return to File Manager</button>
+  </div>
+
+  <div class="gui-viewport-wrap" id="gui-viewport-wrap">
+    <!-- Real X11/RFB Framebuffer Canvas (shown ONLY when runtime creates a real visible window) -->
+    <canvas class="gui-canvas" id="gui-canvas" width="800" height="600"></canvas>
+
+    <!-- Truthful Lifecycle & Diagnostic Card (shown while starting, waiting for window, or when runtime is missing) -->
+    <div class="gui-lifecycle-card" id="gui-lifecycle-card">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <strong id="gui-card-title" style="font-size:14px">Windows GUI Session Lifecycle</strong>
+        <span class="mbadge mb-anal" id="gui-card-sub">Win32 GUI</span>
+      </div>
+      <div class="gui-step-list" id="gui-step-list"></div>
+      <div class="dlg-warn" id="gui-card-diag"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" onclick="closeGuiView();if(activeGuiFile)openAnalyzeModal(activeGuiFile)">Inspect PE Header</button>
+        <button class="btn pri" onclick="closeGuiView()">Back to Explorer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ANDROID INPUT BRIDGE TOOLBAR (PRD Section 19.3) -->
+  <div class="gui-input-bar">
+    <button class="gui-key-btn" onclick="sendGuiMouseClick('click')">Left Click</button>
+    <button class="gui-key-btn" onclick="sendGuiMouseClick('right_click')">Right Click</button>
+    <button class="gui-key-btn" onclick="sendGuiKey('Tab')">Tab</button>
+    <button class="gui-key-btn" onclick="sendGuiKey('Return')">Enter</button>
+    <button class="gui-key-btn" onclick="sendGuiKey('Escape')">Esc</button>
+    <button class="gui-key-btn" onclick="sendGuiKey('BackSpace')">Bksp</button>
+    <button class="gui-key-btn" onclick="sendGuiKey('Up')">Up</button>
+    <button class="gui-key-btn" onclick="sendGuiKey('Down')">Down</button>
+    <input class="gui-kbd-input" id="gui-kbd-input" placeholder="Tap to type text into active Windows window..." onkeydown="guiKbdKey(event)">
+  </div>
+</div>
+
+<!-- RUN / PROBE DIALOG -->
+<div class="overlay" id="rundlg" onclick="if(event.target===this)closeDlg()">
+  <div class="dlg">
+    <div class="dlg-title">
+      <span id="dlg-icon"></span>
+      <span id="dlg-title">Prepare Execution</span>
+      <button class="dlg-close" onclick="closeDlg()" aria-label="Close dialog">
+        <svg class="ico ico-sm" viewBox="0 0 16 16"><line x1="3.5" y1="3.5" x2="12.5" y2="12.5"/><line x1="12.5" y1="3.5" x2="3.5" y2="12.5"/></svg>
+      </button>
+    </div>
+    <div class="dlg-body">
+      <div class="dlg-info" id="dlg-info"></div>
+      <div class="dlg-warn" id="dlg-security-note">
+        Security Notice: Untrusted scripts and binaries execute inside the isolated VFS or staged workspace with least-privilege permissions.
+      </div>
+      <label class="dlg-label">Execution Mode & Launch Plan:</label>
+      <div class="dlg-preview" id="dlg-preview"></div>
+      <label class="dlg-label">Arguments (optional):</label>
+      <input class="dlg-args" id="dlg-args" placeholder="arg1 arg2" oninput="updateRunPreview()">
+    </div>
+    <div class="dlg-footer">
+      <button class="btn" onclick="closeDlg()">Cancel</button>
+      <button class="btn" id="dlg-btn-analyze" onclick="closeDlg();if(pendingFile)openAnalyzeModal(pendingFile)">Analyze Only</button>
+      <button class="btn pri" id="dlg-btn-exec" onclick="confirmRun()">Execute</button>
+    </div>
+  </div>
+</div>
+
+<!-- DEDICATED PE / REGISTRY ANALYSIS MODAL -->
+<div class="overlay" id="analdlg" onclick="if(event.target===this)closeAnalyzeModal()">
+  <div class="dlg">
+    <div class="dlg-title">
+      <span id="anal-icon"></span>
+      <span id="anal-title">Static Binary / Registry Analysis</span>
+      <button class="dlg-close" onclick="closeAnalyzeModal()" aria-label="Close analysis modal">
+        <svg class="ico ico-sm" viewBox="0 0 16 16"><line x1="3.5" y1="3.5" x2="12.5" y2="12.5"/><line x1="12.5" y1="3.5" x2="3.5" y2="12.5"/></svg>
+      </button>
+    </div>
+    <div class="dlg-body" id="anal-body"></div>
+    <div class="dlg-footer" id="anal-footer">
+      <button class="btn" onclick="closeAnalyzeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- BUILT-IN TEXT / SCRIPT EDITOR MODAL -->
+<div class="overlay" id="editdlg" onclick="if(event.target===this)closeEditorModal()">
+  <div class="dlg">
+    <div class="dlg-title">
+      <span id="edit-title">Edit File</span>
+      <button class="dlg-close" onclick="closeEditorModal()" aria-label="Close editor">
+        <svg class="ico ico-sm" viewBox="0 0 16 16"><line x1="3.5" y1="3.5" x2="12.5" y2="12.5"/><line x1="12.5" y1="3.5" x2="3.5" y2="12.5"/></svg>
+      </button>
+    </div>
+    <div class="dlg-body">
+      <div class="dlg-info" id="edit-path"></div>
+      <textarea class="dlg-editor" id="edit-area" spellcheck="false"></textarea>
+    </div>
+    <div class="dlg-footer">
+      <button class="btn" onclick="closeEditorModal()">Cancel</button>
+      <button class="btn pri" onclick="saveEditedFile()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL INPUT / CONFIRM DIALOG -->
+<div class="overlay" id="inputdlg" onclick="if(event.target===this)closeInputDlg(null)">
+  <div class="dlg">
+    <div class="dlg-title">
+      <span id="idlg-title">Input Required</span>
+      <button class="dlg-close" onclick="closeInputDlg(null)" aria-label="Close">
+        <svg class="ico ico-sm" viewBox="0 0 16 16"><line x1="3.5" y1="3.5" x2="12.5" y2="12.5"/><line x1="12.5" y1="3.5" x2="3.5" y2="12.5"/></svg>
+      </button>
+    </div>
+    <div class="dlg-body">
+      <div class="dlg-info" id="idlg-msg" style="white-space:pre-wrap"></div>
+      <input class="dlg-args" id="idlg-val" onkeydown="if(event.key==='Enter')closeInputDlg(this.value)">
+    </div>
+    <div class="dlg-footer">
+      <button class="btn" onclick="closeInputDlg(null)">Cancel</button>
+      <button class="btn pri" id="idlg-ok" onclick="closeInputDlg(document.getElementById('idlg-val').value)">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="saf-file-input" style="display:none" onchange="handleSafFilePicked(event)">
+
+<script>
+// INLINE SVG ICON REGISTRY (ZERO EMOJIS)
+const SVGS = {
+  app:      '<svg class="ico ico-lg" viewBox="0 0 16 16"><path d="M1.5 3.5A1.5 1.5 0 0 1 3 2h3.2l1.5 1.8H13A1.5 1.5 0 0 1 14.5 5.3v7.2A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5V3.5z"/><polyline points="5.5 7.5 7.5 9.5 5.5 11.5"/><line x1="8.5" y1="11.5" x2="11" y2="11.5"/></svg>',
+  up:       '<svg class="ico" viewBox="0 0 16 16"><line x1="8" y1="13" x2="8" y2="3"/><polyline points="4 7 8 3 12 7"/></svg>',
+  refresh:  '<svg class="ico" viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><polyline points="13.5 2 13.5 5.5 10 5.5"/></svg>',
+  play:     '<svg class="ico" viewBox="0 0 16 16"><polygon points="4 2.5 13.5 8 4 13.5" fill="currentColor" stroke="none"/></svg>',
+  edit:     '<svg class="ico" viewBox="0 0 16 16"><path d="M11.2 2.3l2.5 2.5-8.4 8.4H2.8v-2.5l8.4-8.4z"/><line x1="9.5" y1="4" x2="12" y2="6.5"/></svg>',
+  copy:     '<svg class="ico" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.2"/><path d="M10.5 5.5V3.2A1.2 1.2 0 0 0 9.3 2H3.2A1.2 1.2 0 0 0 2 3.2v6.1a1.2 1.2 0 0 0 1.2 1.2h2.3"/></svg>',
+  newfolder:'<svg class="ico" viewBox="0 0 16 16"><path d="M1.5 3.5A1.2 1.2 0 0 1 2.7 2.3h3.3l1.4 1.7h5.9a1.2 1.2 0 0 1 1.2 1.2v7.3a1.2 1.2 0 0 1-1.2 1.2H2.7a1.2 1.2 0 0 1-1.2-1.2V3.5z"/><line x1="8" y1="6.5" x2="8" y2="11.5"/><line x1="5.5" y1="9" x2="10.5" y2="9"/></svg>',
+  wrench:   '<svg class="ico" viewBox="0 0 16 16"><path d="M9.8 6.2a3.5 3.5 0 0 0-4.4-4.4L7.5 4 6 5.5 3.8 3.4a3.5 3.5 0 0 0 4.4 4.4l4.1 4.1a1.2 1.2 0 0 0 1.7-1.7L9.8 6.2z"/></svg>',
+  checkenv: '<svg class="ico" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><polyline points="5.2 8.2 7.2 10.2 11 6.2"/></svg>',
+  help:     '<svg class="ico" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M6.3 6.2a1.8 1.8 0 1 1 2.5 1.7c-.5.3-.8.6-.8 1.3"/><circle cx="8" cy="11.8" r=".6" fill="currentColor"/></svg>',
+  home:     '<svg class="ico" viewBox="0 0 16 16"><path d="M2 7.2L8 2l6 5.2v6.3a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.2z"/><polyline points="6 14.5 6 9.5 10 9.5 10 14.5"/></svg>',
+  monitor:  '<svg class="ico" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.2"/><line x1="5" y1="14" x2="11" y2="14"/><line x1="8" y1="11" x2="8" y2="14"/></svg>',
+  download: '<svg class="ico" viewBox="0 0 16 16"><line x1="8" y1="2.5" x2="8" y2="10.5"/><polyline points="4.5 7.5 8 11 11.5 7.5"/><line x1="3" y1="13.5" x2="13" y2="13.5"/></svg>',
+  doc:      '<svg class="ico" viewBox="0 0 16 16"><path d="M3.5 1.8h6l3 3v9.4a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1V2.8a1 1 0 0 1 1-1z"/><polyline points="9.5 1.8 9.5 4.8 12.5 4.8"/></svg>',
+  phone:    '<svg class="ico" viewBox="0 0 16 16"><rect x="4" y="1.5" width="8" height="13" rx="1.5"/><line x1="7" y1="12.2" x2="9" y2="12.2"/></svg>',
+  drive:    '<svg class="ico" viewBox="0 0 16 16"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><line x1="2" y1="9.5" x2="14" y2="9.5"/><circle cx="11.5" cy="11" r=".7" fill="currentColor"/></svg>',
+  clock:    '<svg class="ico" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><polyline points="8 4.5 8 8 10.5 9.5"/></svg>',
+  globe:    '<svg class="ico" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><ellipse cx="8" cy="8" rx="2.8" ry="6"/><line x1="2" y1="8" x2="14" y2="8"/></svg>',
+  folder:   '<svg class="ico" viewBox="0 0 16 16"><path d="M1.5 3.5A1.2 1.2 0 0 1 2.7 2.3h3.3l1.4 1.7h5.9a1.2 1.2 0 0 1 1.2 1.2v7.3a1.2 1.2 0 0 1-1.2 1.2H2.7a1.2 1.2 0 0 1-1.2-1.2V3.5z" fill="#f2b824" stroke="#d99b16"/></svg>',
+  bat:      '<svg class="ico" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" stroke="#58a6ff"/><polyline points="4.5 6 7 8 4.5 10" stroke="#58a6ff"/><line x1="8" y1="10" x2="11" y2="10" stroke="#58a6ff"/></svg>',
+  ps1:      '<svg class="ico" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="#012456" stroke="#2c7be5"/><polyline points="4.5 5.8 7.5 8 4.5 10.2" stroke="#ffffff"/><line x1="8" y1="10.2" x2="11.2" y2="10.2" stroke="#ffffff"/></svg>',
+  vbs:      '<svg class="ico" viewBox="0 0 16 16"><path d="M3.5 1.8h6l3 3v9.4a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1V2.8a1 1 0 0 1 1-1z" stroke="#9b59b6"/><polyline points="6 7.5 4.5 9 6 10.5" stroke="#9b59b6"/><polyline points="10 7.5 11.5 9 10 10.5" stroke="#9b59b6"/></svg>',
+  reg:      '<svg class="ico" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx=".8" stroke="#00a88f"/><rect x="9" y="2" width="5" height="5" rx=".8" stroke="#00a88f"/><rect x="2" y="9" width="5" height="5" rx=".8" stroke="#00a88f"/><rect x="9" y="9" width="5" height="5" rx=".8" stroke="#00a88f"/></svg>',
+  rust:     '<svg class="ico" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5" stroke="#e06c38"/><circle cx="8" cy="8" r="2" stroke="#e06c38"/><line x1="8" y1="1.2" x2="8" y2="3" stroke="#e06c38"/><line x1="8" y1="13" x2="8" y2="14.8" stroke="#e06c38"/><line x1="1.2" y1="8" x2="3" y2="8" stroke="#e06c38"/><line x1="13" y1="8" x2="14.8" y2="8" stroke="#e06c38"/></svg>',
+  code:     '<svg class="ico" viewBox="0 0 16 16"><polyline points="5.5 4.5 2 8 5.5 11.5" stroke="#3fb950"/><polyline points="10.5 4.5 14 8 10.5 11.5" stroke="#3fb950"/><line x1="9" y1="3.5" x2="7" y2="12.5" stroke="#3fb950"/></svg>',
+  sh:       '<svg class="ico" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" stroke="#3fb950"/><path d="M5 6.5l2.5 1.8L5 10.1" stroke="#3fb950"/><line x1="8.5" y1="10.1" x2="11" y2="10.1" stroke="#3fb950"/></svg>',
+  binary:   '<svg class="ico" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="1.5" stroke="#e3b341"/><line x1="2" y1="5.5" x2="14" y2="5.5" stroke="#e3b341"/><rect x="5" y="7.5" width="6" height="4" stroke="#e3b341"/></svg>',
+  archive:  '<svg class="ico" viewBox="0 0 16 16"><rect x="2.5" y="2" width="11" height="12" rx="1.2" stroke="#d99b16"/><line x1="8" y1="2" x2="8" y2="14" stroke="#d99b16" stroke-dasharray="1.5 1.5"/></svg>',
+  info:     '<svg class="ico" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><line x1="8" y1="7" x2="8" y2="11"/><circle cx="8" cy="4.8" r=".6" fill="currentColor"/></svg>',
+  trash:    '<svg class="ico" viewBox="0 0 16 16"><polyline points="2.5 4 13.5 4"/><path d="M5.5 4V2.5h5V4"/><path d="M4 4l.8 9.5a1 1 0 0 0 1 .9h4.4a1 1 0 0 0 1-.9L12 4"/></svg>',
+  chevUp:   '<svg class="ico ico-sm" viewBox="0 0 16 16"><polyline points="4 10 8 6 12 10"/></svg>',
+  chevDown: '<svg class="ico ico-sm" viewBox="0 0 16 16"><polyline points="4 6 8 10 12 6"/></svg>',
+  crumbSep: '<svg class="ico ico-sm" viewBox="0 0 16 16"><polyline points="6 4 10 8 6 12"/></svg>',
+  dots:     '<svg class="ico ico-sm" viewBox="0 0 16 16"><circle cx="8" cy="3.5" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="12.5" r="1.2" fill="currentColor"/></svg>'
+};
+
+document.getElementById('ico-app').innerHTML        = SVGS.app;
+document.getElementById('tb-ico-up').innerHTML      = SVGS.up;
+document.getElementById('tb-ico-ref').innerHTML     = SVGS.refresh;
+document.getElementById('tb-ico-run').innerHTML     = SVGS.play;
+document.getElementById('tb-ico-pe').innerHTML      = SVGS.binary;
+document.getElementById('tb-ico-edit').innerHTML    = SVGS.edit;
+document.getElementById('tb-ico-newfile').innerHTML = SVGS.doc;
+document.getElementById('tb-ico-folder').innerHTML  = SVGS.newfolder;
+document.getElementById('tb-ico-copy').innerHTML    = SVGS.copy;
+document.getElementById('tb-ico-saf').innerHTML     = SVGS.phone;
+document.getElementById('tb-ico-env').innerHTML     = SVGS.checkenv;
+document.getElementById('tb-ico-help').innerHTML    = SVGS.help;
+document.getElementById('term-tog').innerHTML       = SVGS.chevDown;
+document.querySelectorAll('[data-svg]').forEach(el => {
+  const k = el.getAttribute('data-svg');
+  if (SVGS[k]) el.innerHTML = SVGS[k];
+});
+
+const memStore = {};
+function sGet(k, defVal) {
+  try { const v = localStorage.getItem(k); return v !== null ? v : defVal; }
+  catch (_) { return memStore[k] !== undefined ? memStore[k] : defVal; }
+}
+function sSet(k, val) {
+  memStore[k] = String(val);
+  try { localStorage.setItem(k, String(val)); } catch (_) {}
+}
+
+// STATE
+const RUST_HTTP_API = 'http://127.0.0.1:18765/api';
+let CWD = sGet('wsr_cwd', 'C:\\Users\\Admin\\Desktop');
+let currentAndroidSlot = null; // null if VFS, or 'downloads'|'documents'|'pictures'|'music'|'movies'
+let hist = [CWD], hIdx = 0;
+let allFiles = [], filtered = [];
+let sel = null;
+let sortF = sGet('wsr_sortF', 'name');
+let sortAsc = sGet('wsr_sortAsc', 'true') !== 'false';
+let typeF = null;
+let termState = sGet('wsr_termState', 'half');
+let termFontSize = parseInt(sGet('wsr_termFont', '12'), 10);
+let pendingFile = null;
+let pendingProbe = null;
+let editingFile = null;
+let cmdHist = JSON.parse(sGet('wsr_cmdHist', '[]'));
+let cmdIdx = -1;
+let inputResolver = null;
+
+// GUI Session State (PRD Section 19)
+let activeGuiSessionId = 0;
+let activeGuiFile = null;
+let pointerTrackpadMode = false;
+let guiZoom = 1.0;
+let lastPointerX = 400, lastPointerY = 300;
+
+document.documentElement.style.setProperty('--term-font', termFontSize + 'px');
+applyTermState(termState);
+
+// COLLAPSIBLE NAVIGATION DRAWER (PRD Section 8)
+function isNarrowScreen() { return window.innerWidth < 600; }
+
+function toggleSidebar() {
+  const btn = document.getElementById('btn-nav-toggle');
+  if (isNarrowScreen()) {
+    const open = document.body.classList.toggle('nav-open-mobile');
+    document.getElementById('drawer-scrim').classList.toggle('vis', open);
+    btn.setAttribute('aria-label', open ? 'Hide navigation' : 'Show navigation');
+  } else {
+    const collapsed = document.body.classList.toggle('nav-collapsed');
+    sSet('wsr_nav_collapsed_desktop', collapsed ? '1' : '0');
+    btn.setAttribute('aria-label', collapsed ? 'Show navigation' : 'Hide navigation');
+  }
+}
+
+function closeMobileDrawer() {
+  document.body.classList.remove('nav-open-mobile');
+  document.getElementById('drawer-scrim').classList.remove('vis');
+  document.getElementById('btn-nav-toggle').setAttribute('aria-label', 'Show navigation');
+}
+
+// Android Back Button integration (PRD Section 8.5 & 19.3)
+window.handleAndroidBack = function() {
+  if (document.body.classList.contains('nav-open-mobile')) {
+    closeMobileDrawer();
+    return true;
+  }
+  if (document.getElementById('gui-view').classList.contains('vis')) {
+    closeGuiView();
+    return true;
+  }
+  const openOverlays = document.querySelectorAll('.overlay.vis');
+  if (openOverlays.length > 0) {
+    closeDlg(); closeAnalyzeModal(); closeEditorModal(); closeInputDlg(null);
+    return true;
+  }
+  if (hIdx > 0) {
+    goBack();
+    return true;
+  }
+  return false;
+};
+
+let touchStartX = 0;
+document.getElementById('sidebar').addEventListener('touchstart', e => {
+  touchStartX = e.touches[0].clientX;
+}, { passive: true });
+document.getElementById('sidebar').addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  if (dx < -45 && isNarrowScreen()) closeMobileDrawer();
+}, { passive: true });
+
+function toggleSection(secId) {
+  document.getElementById(secId)?.classList.toggle('collapsed');
+}
+
+function toggleOverflowMenu(e) {
+  e.stopPropagation();
+  document.getElementById('overflow-menu').classList.toggle('vis');
+}
+function hideOverflow() {
+  document.getElementById('overflow-menu').classList.remove('vis');
+}
+
+function iconForFile(name, isDir) {
+  if (isDir) return SVGS.folder;
+  const ext = (name.match(/\.[^.]+$/)?.[0] || '').toLowerCase();
+  const map = {
+    '.bat': SVGS.bat, '.cmd': SVGS.bat, '.ps1': SVGS.ps1, '.vbs': SVGS.vbs,
+    '.reg': SVGS.reg, '.exe': SVGS.binary, '.dll': SVGS.binary, '.msi': SVGS.binary,
+    '.scr': SVGS.binary, '.com': SVGS.binary, '.rs': SVGS.rust, '.py': SVGS.code,
+    '.js': SVGS.code, '.sh': SVGS.sh, '.zip': SVGS.archive
+  };
+  return map[ext] || SVGS.doc;
+}
+
+function badgeClassForMode(mode) {
+  switch (mode) {
+    case 'INTERPRETED': return 'mb-interp';
+    case 'NATIVE':      return 'mb-native';
+    case 'EMULATED':    return 'mb-emul';
+    case 'ANALYSIS ONLY': return 'mb-anal';
+    default:            return 'mb-unsup';
+  }
+}
+
+function detectModeForRealFile(name, isDir) {
+  if (isDir) return { format_label: 'Real Android Folder', mode: 'FOLDER', can_execute: false, can_analyze: false };
+  const ext = (name.match(/\.[^.]+$/)?.[0] || '').toLowerCase();
+  if (ext === '.bat' || ext === '.cmd') return { format_label: `Windows Batch (${ext})`, mode: 'INTERPRETED', can_execute: true, can_analyze: true };
+  if (ext === '.reg') return { format_label: 'Windows Registry (.reg)', mode: 'INTERPRETED', can_execute: true, can_analyze: true };
+  if (ext === '.sh')  return { format_label: 'POSIX Shell (.sh)', mode: 'NATIVE', can_execute: true, can_analyze: true };
+  if (ext === '.exe' || ext === '.dll' || ext === '.msi' || ext === '.scr') {
+    return { format_label: `Windows Binary (${ext})`, mode: 'ANALYSIS ONLY', can_execute: true, can_analyze: true };
+  }
+  return { format_label: `${ext ? ext.toUpperCase() : 'Android'} File`, mode: 'ANALYSIS ONLY', can_execute: false, can_analyze: true };
+}
+
+async function callRustApi(tool, payload = {}) {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4000);
+    const res = await fetch(RUST_HTTP_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool, ...payload }),
+      signal: ctrl.signal
+    });
+    clearTimeout(timer);
+    if (res.ok) {
+      document.getElementById('engine-status').textContent = 'Rust APK VFS Active';
+      return await res.json();
+    }
+  } catch (_) {}
+  return null;
+}
+
+// REAL ANDROID STORAGE INTEGRATION (PRD Section 20)
+function refreshSidebarMountTags() {
+  const slots = ['downloads', 'documents', 'pictures', 'music', 'movies'];
+  slots.forEach(s => {
+    const tag = document.getElementById('tag-slot-' + s);
+    if (!tag) return;
+    let connected = false;
+    if (typeof window.AndroidSAF !== 'undefined' && window.AndroidSAF.getPersistedTreeUri) {
+      const uri = window.AndroidSAF.getPersistedTreeUri(s);
+      connected = !!(uri && uri.length > 0);
+    }
+    if (connected) {
+      tag.textContent = 'Real';
+      tag.className = 'real-tag';
+    } else {
+      tag.textContent = 'Connect';
+      tag.className = 'unconn-tag';
+    }
+  });
+}
+
+function openRealAndroidSlot(slot, winAlias, sideEl) {
+  currentAndroidSlot = slot;
+  nav(winAlias, true, sideEl, slot);
+}
+
+function connectRealAndroidFolder(slot) {
+  const targetSlot = slot || currentAndroidSlot || 'downloads';
+  if (typeof window.AndroidSAF !== 'undefined' && window.AndroidSAF.pickFolderTree) {
+    window.AndroidSAF.pickFolderTree(targetSlot);
+  } else {
+    openInputModal(
+      'Android SAF Folder Picker',
+      `On an Android device, this opens the system Storage Access Framework folder picker (Intent.ACTION_OPEN_DOCUMENT_TREE) for "${targetSlot}".\n\nNote: Android 11+ restricts selecting the top-level Downloads root directly; you can select any subfolder inside Downloads/Documents or use "View via MediaStore" / "Pick Single File".`,
+      '',
+      true
+    );
+  }
+}
+
+window.onSafTreeConnected = async function(slot, uriStr) {
+  await callRustApi('wsr_save_android_mount', { slot, uri: uriStr });
+  refreshSidebarMountTags();
+  tlog(`[ANDROID SAF CONNECTED] Slot '${slot}' linked to ${uriStr}`, 'lk');
+  refresh();
+};
+
+async function loadMediaStoreFallback(slot) {
+  if (typeof window.AndroidSAF !== 'undefined' && window.AndroidSAF.listMediaStoreJson) {
+    try {
+      const raw = window.AndroidSAF.listMediaStoreJson(slot);
+      const parsed = JSON.parse(raw);
+      if (parsed.status === 'ok' && Array.isArray(parsed.entries)) {
+        document.getElementById('src-kind-badge').textContent = 'REAL ANDROID (MEDIASTORE)';
+        document.getElementById('src-kind-badge').className = 'src-badge src-real';
+        document.getElementById('drive-banner-text').textContent = `${CWD} -> Android MediaStore (${slot})`;
+        allFiles = parsed.entries.map(e => {
+          const m = detectModeForRealFile(e.name, false);
+          return {
+            name: e.name,
+            path: CWD.replace(/[\\/]$/, '') + '\\' + e.name,
+            contentUri: e.uri,
+            isRealAndroid: true,
+            isDir: false,
+            size: e.size || 0,
+            format_label: m.format_label,
+            mode: m.mode,
+            can_execute: m.can_execute,
+            can_analyze: m.can_analyze
+          };
+        });
+        renderFiles();
+        return;
+      }
+    } catch (_) {}
+  }
+  tlog(`[INFO] MediaStore query requires running inside the Android APK with media permission granted.`, 'lw');
+}
+
+// STAGE REAL ANDROID CONTENT URI BEFORE EXECUTION OR ANALYSIS (PRD Section 20.3)
+async function ensureFileStagedForBackend(f) {
+  if (!f.isRealAndroid || !f.contentUri) {
+    return f.path;
+  }
+  if (typeof window.AndroidSAF !== 'undefined' && window.AndroidSAF.stageContentUriToVfs) {
+    tlog(`[STAGING] Copying Android content URI (${f.name}) to isolated VFS workspace C:\\Temp\\android_stage\\...`, 'li');
+    try {
+      const raw = window.AndroidSAF.stageContentUriToVfs(f.contentUri, f.name);
+      const res = JSON.parse(raw);
+      if (res.status === 'ok' && res.staged_win_path) {
+        tlog(`[STAGED] Ready at ${res.staged_win_path} (Edits/outputs in VFS must be exported back to Android storage).`, 'lk');
+        return res.staged_win_path;
+      }
+      throw new Error(res.error || 'Staging failed');
+    } catch (e) {
+      tlog(`[ERROR] Failed staging Android URI: ${e.message}`, 'le');
+      return null;
+    }
+  }
+  return f.path;
+}
+
+// DIRECTORY LISTING (COMBINES SAF REAL ANDROID FOLDERS + VIRTUAL WINDOWS VFS)
+async function listDir(path, slotOverride = null) {
+  refreshSidebarMountTags();
+  const normLow = path.toLowerCase().replace(/\//g, '\\');
+  let slot = slotOverride;
+  if (!slot) {
+    if (normLow.endsWith('\\users\\admin\\downloads') || normLow === 'd:\\') slot = 'downloads';
+    else if (normLow.endsWith('\\users\\admin\\documents')) slot = 'documents';
+    else if (normLow.endsWith('\\users\\admin\\pictures')) slot = 'pictures';
+    else if (normLow.endsWith('\\users\\admin\\music')) slot = 'music';
+    else if (normLow.endsWith('\\users\\admin\\movies')) slot = 'movies';
+  }
+  currentAndroidSlot = slot;
+
+  // If this is a Real Android Storage slot, check AndroidSAF bridge first
+  if (slot) {
+    if (typeof window.AndroidSAF !== 'undefined' && window.AndroidSAF.listSafFolderJson) {
+      try {
+        const raw = window.AndroidSAF.listSafFolderJson(slot);
+        const safRes = JSON.parse(raw);
+        if (safRes.status === 'ok') {
+          document.getElementById('src-kind-badge').textContent = 'REAL ANDROID FOLDER';
+          document.getElementById('src-kind-badge').className = 'src-badge src-real';
+          document.getElementById('drive-banner-text').textContent = `${path} -> Connected SAF Tree (${safRes.tree_uri})`;
+          return (safRes.entries || []).map(e => {
+            const m = detectModeForRealFile(e.name, e.is_dir);
+            return {
+              name: e.name,
+              path: path.replace(/[\\/]$/, '') + '\\' + e.name,
+              contentUri: e.uri,
+              isRealAndroid: true,
+              isDir: !!e.is_dir,
+              size: e.size || 0,
+              format_label: m.format_label,
+              mode: m.mode,
+              can_execute: m.can_execute,
+              can_analyze: m.can_analyze
+            };
+          });
+        } else if (safRes.status === 'permission_revoked') {
+          return {requiresPermission: true, revoked: true, slot, path};
+        } else if (safRes.status === 'unconnected') {
+          return {requiresPermission: true, revoked: false, slot, path};
+        }
+      } catch (_) {}
+    }
+  }
+
+  // Query Rust VFS backend
+  const apiRes = await callRustApi('wsr_list_directory', { path });
+  if (apiRes) {
+    if (apiRes.status === 'error') {
+      throw new Error(apiRes.error || 'Unable to read directory');
+    }
+    if (apiRes.win_path) CWD = apiRes.win_path;
+    const isReal = !!apiRes.is_real_android;
+    const isAuth = !!apiRes.is_authorized;
+    document.getElementById('src-kind-badge').textContent = isReal ? 'REAL ANDROID FOLDER' : 'VIRTUAL VFS';
+    document.getElementById('src-kind-badge').className = 'src-badge ' + (isReal ? 'src-real' : 'src-vfs');
+    document.getElementById('drive-banner-text').textContent = apiRes.backing || CWD;
+
+    if (isReal && !isAuth && (!apiRes.entries || apiRes.entries.length === 0)) {
+      return {requiresPermission: true, revoked: false, slot: apiRes.slot || slot || 'downloads', path: CWD};
+    }
+
+    return (apiRes.entries || []).map(e => ({
+      name: e.name,
+      path: e.win_path || e.path,
+      androidPath: e.path,
+      isRealAndroid: isReal,
+      isDir: e.is_dir,
+      size: e.size || 0,
+      format_label: e.format_label || (e.is_dir ? 'File Folder' : 'File'),
+      mode: e.mode || (e.is_dir ? 'FOLDER' : 'UNSUPPORTED'),
+      can_execute: !!e.can_execute,
+      can_analyze: !!e.can_analyze
+    }));
+  }
+
+  // Browser preview fallback: if Downloads or another real slot is selected without authorization, show the Connect card
+  if (slot) {
+    document.getElementById('src-kind-badge').textContent = 'REAL ANDROID FOLDER';
+    document.getElementById('src-kind-badge').className = 'src-badge src-real';
+    document.getElementById('drive-banner-text').textContent = `${path} -> Not Connected (Permission Required)`;
+    return {requiresPermission: true, revoked: false, slot, path};
+  }
+
+  document.getElementById('src-kind-badge').textContent = 'VIRTUAL VFS';
+  document.getElementById('src-kind-badge').className = 'src-badge src-vfs';
+  document.getElementById('drive-banner-text').textContent = `${path} -> Isolated App-Private Windows VFS`;
+  return [
+    { name: 'sys_check.bat',      path: 'C:\\Users\\Admin\\Desktop\\sys_check.bat',      isDir: false, size: 512, format_label: 'Windows Batch Script (.bat)', mode: 'INTERPRETED',   can_execute: true,  can_analyze: true },
+    { name: 'deploy_project.cmd', path: 'C:\\Users\\Admin\\Desktop\\deploy_project.cmd', isDir: false, size: 420, format_label: 'Windows Command Script (.cmd)',mode: 'INTERPRETED',   can_execute: true,  can_analyze: true },
+    { name: 'dev_env.reg',        path: 'C:\\Users\\Admin\\Desktop\\dev_env.reg',        isDir: false, size: 340, format_label: 'Windows Registry File (.reg)', mode: 'INTERPRETED',   can_execute: true,  can_analyze: true },
+  ];
+}
+
+// NAVIGATION
+async function nav(path, push = true, sideEl = null, slotOverride = null) {
+  if (isNarrowScreen()) closeMobileDrawer();
+  CWD = path;
+  sSet('wsr_cwd', CWD);
+  if (push) {
+    hist = hist.slice(0, hIdx + 1);
+    hist.push(path);
+    hIdx = hist.length - 1;
+  }
+  document.getElementById('st-path').textContent = CWD;
+  document.getElementById('tprompt').textContent = CWD + '>';
+  renderCrumbs(CWD);
+  updateNavBtns();
+
+  if (sideEl) {
+    document.querySelectorAll('#sec-android .si, #sec-pc .si').forEach(el => el.classList.remove('on'));
+    sideEl.classList.add('on');
+  }
+
+  document.getElementById('filelist').innerHTML = `<div class="empty"><div class="spin"></div><span>Reading ${esc(CWD)}...</span></div>`;
+  try {
+    const res = await listDir(path, slotOverride);
+    if (res && res.requiresPermission) {
+      allFiles = [];
+      renderPermissionPromptCard(res);
+      return;
+    }
+    allFiles = res;
+    document.getElementById('st-path').textContent = CWD;
+    document.getElementById('tprompt').textContent = CWD + '>';
+    renderCrumbs(CWD);
+    renderFiles();
+  } catch (e) {
+    document.getElementById('filelist').innerHTML = `<div class="empty"><span style="color:#f85149">${esc(e.message)}</span></div>`;
+  }
+}
+
+// RENDER REAL ANDROID PERMISSION / CONNECT CARD (PRD Section 20.1, 20.2, 20.4)
+function renderPermissionPromptCard(info) {
+  const list = document.getElementById('filelist');
+  const slotTitle = info.slot.charAt(0).toUpperCase() + info.slot.slice(1);
+  const statusHeading = info.revoked
+    ? `Permission Revoked for Android ${slotTitle}`
+    : `Connect Real Android ${slotTitle} Folder`;
+  list.innerHTML = `
+    <div class="perm-card">
+      <h3>${SVGS.phone} <span>${esc(statusHeading)}</span></h3>
+      <p>
+        <strong>${esc(info.path)}</strong> maps to your device's real <strong>${esc(slotTitle)}</strong> storage rather than a fake virtual folder.
+        Grant folder access so Windows Script Runner can list, inspect, and stage real scripts and binaries.
+      </p>
+      <div class="perm-note">
+        <strong>Android 11+ Scoped Storage Notice:</strong> Some Android versions block selecting the root <code>Downloads</code> folder directly in the system folder picker. If blocked, select a subfolder (e.g. <code>Downloads/Scripts</code>), browse via <strong>MediaStore</strong>, or pick an individual file.
+      </div>
+      <div class="perm-actions">
+        <button class="btn pri" onclick="connectRealAndroidFolder('${esc(info.slot)}')">Connect ${esc(slotTitle)} Folder (SAF)</button>
+        <button class="btn" onclick="loadMediaStoreFallback('${esc(info.slot)}')">Browse via MediaStore</button>
+        <button class="btn" onclick="importSafFile()">Pick Single File (SAF)</button>
+      </div>
+    </div>`;
+  document.getElementById('st-items').textContent = 'Not connected (Permission required)';
+}
+
+function renderCrumbs(path) {
+  const bc = document.getElementById('bcrumbs');
+  const isWin = /^[A-Za-z]:/.test(path);
+  const sep = isWin ? '\\' : '/';
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  bc.innerHTML = '';
+  let acc = '';
+  parts.forEach((p, i) => {
+    if (i === 0 && isWin) acc = p + '\\';
+    else if (i === 0) acc = '/' + p;
+    else acc = acc.replace(/[\\/]$/, '') + sep + p;
+    const c = document.createElement('span');
+    c.className = 'crumb';
+    c.textContent = p;
+    const cap = acc;
+    c.onclick = e => { e.stopPropagation(); nav(cap); };
+    bc.appendChild(c);
+    if (i < parts.length - 1) {
+      const s = document.createElement('span');
+      s.className = 'csep';
+      s.innerHTML = SVGS.crumbSep;
+      bc.appendChild(s);
+    }
+  });
+  const pbar = document.getElementById('pbar');
+  pbar.scrollLeft = pbar.scrollWidth;
+}
+
+function goBack()  { if (hIdx > 0) { hIdx--; nav(hist[hIdx], false); } }
+function goFwd()   { if (hIdx < hist.length - 1) { hIdx++; nav(hist[hIdx], false); } }
+function goUp()    {
+  const isWin = /^[A-Za-z]:/.test(CWD);
+  const parts = CWD.split(/[\\/]/).filter(Boolean);
+  if (parts.length > 1) {
+    const parent = isWin
+      ? (parts.length === 2 ? parts[0] + '\\' : parts.slice(0, -1).join('\\'))
+      : ('/' + parts.slice(0, -1).join('/'));
+    nav(parent);
+  }
+}
+function refresh() { nav(CWD, false, null, currentAndroidSlot); }
+
+function updateNavBtns() {
+  document.getElementById('nb-back').disabled = hIdx <= 0;
+  document.getElementById('nb-fwd').disabled  = hIdx >= hist.length - 1;
+}
+
+// RENDER FILE LIST
+function renderFiles() {
+  const list = document.getElementById('filelist');
+  const q = document.getElementById('search').value.toLowerCase();
+  let files = [...allFiles];
+  if (typeF) {
+    if (typeF === '.bat') {
+      files = files.filter(f => f.isDir || /\.(bat|cmd)$/i.test(f.name));
+    } else if (typeF === '.exe') {
+      files = files.filter(f => f.isDir || /\.(exe|msi|dll|scr|com)$/i.test(f.name));
+    } else {
+      files = files.filter(f => f.isDir || f.name.toLowerCase().endsWith(typeF));
+    }
+  }
+  if (q) files = files.filter(f => f.name.toLowerCase().includes(q));
+
+  files.sort((a, b) => {
+    if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+    let va = a[sortF] || '', vb = b[sortF] || '';
+    if (sortF === 'size') { va = a.size; vb = b.size; }
+    const c = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
+    return sortAsc ? c : -c;
+  });
+  filtered = files;
+
+  if (!files.length) {
+    const filterMsg = typeF ? ` matching filter "${typeF}"` : '';
+    list.innerHTML = `<div class="empty">
+      <span>Directory is empty (no files${esc(filterMsg)} in ${esc(CWD)})</span>
+      <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;justify-content:center">
+        ${typeF ? '<button class="btn" onclick="setTypeFilter(null,document.getElementById(\'f-all\'))">Clear Filter</button>' : ''}
+        <button class="btn pri" onclick="newFile()">Create New Script</button>
+        <button class="btn" onclick="importSafFile()">Import File (SAF)</button>
+      </div>
+    </div>`;
+    document.getElementById('st-items').textContent = '0 items (Empty folder)';
+    return;
+  }
+
+  list.innerHTML = '';
+  files.forEach((f, i) => {
+    const row = document.createElement('div');
+    row.className = 'frow';
+    row.tabIndex = 0;
+    const svgIcon = iconForFile(f.name, f.isDir);
+    const badgeHtml = f.isDir
+      ? ''
+      : `<span class="mbadge ${badgeClassForMode(f.mode)}">${esc(f.mode)}</span>`;
+    const srcTag = f.isRealAndroid ? ' [Android]' : '';
+    const sizeText = f.isDir ? 'Folder' : fmtSize(f.size);
+    const actionLabel = f.isDir ? 'Open' : (f.can_execute ? 'Run' : 'Analyze');
+
+    row.innerHTML = `
+      <div class="fname">
+        <span class="ficon">${svgIcon}</span>
+        <div class="fname-text">
+          <div class="flabel-row"><span class="flabel">${esc(f.name)}</span>${badgeHtml}</div>
+          <div class="fmeta-mobile">${esc(sizeText)} &bull; ${esc(f.format_label)}${esc(srcTag)}</div>
+        </div>
+      </div>
+      <span class="fsize">${f.isDir ? '' : esc(fmtSize(f.size))}</span>
+      <span class="ftype">${esc(f.format_label)}</span>
+      <span class="fdate">${esc(actionLabel)}</span>
+      <button class="row-act" aria-label="File actions" title="Actions">${SVGS.dots}</button>`;
+
+    row.onclick = () => pick(f, row);
+    row.ondblclick = () => activateItem(f);
+    row.querySelector('.row-act').onclick = e => {
+      e.stopPropagation();
+      pick(f, row);
+      showCtx(e, f);
+    };
+    row.oncontextmenu = e => {
+      e.preventDefault();
+      pick(f, row);
+      showCtx(e, f);
+    };
+    list.appendChild(row);
+  });
+  document.getElementById('st-items').textContent = `${files.length} item${files.length !== 1 ? 's' : ''}`;
+}
+
+function pick(f, el) {
+  document.querySelectorAll('.frow.sel').forEach(e => e.classList.remove('sel'));
+  el.classList.add('sel');
+  sel = f;
+  document.getElementById('st-sel').textContent = `"${f.name}" (${f.mode})`;
+}
+
+async function activateItem(f) {
+  if (f.isDir) {
+    nav(f.path);
+    return;
+  }
+  if (/\.dll$/i.test(f.name)) {
+    await openAnalyzeModal(f);
+    return;
+  }
+  if (/\.(exe|scr)$/i.test(f.name)) {
+    await openRunDialog(f);
+    return;
+  }
+  if (/\.(txt|md|json|xml|ini|cfg|log|toml|rs|ps1|vbs)$/i.test(f.name) && !f.can_execute) {
+    await openEditorModal(f);
+    return;
+  }
+  await openRunDialog(f);
+}
+
+function fmtSize(b) {
+  if (!b) return '0 B';
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1048576).toFixed(1) + ' MB';
+}
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+// RUN / PROBE DIALOG + GUI PE LAUNCHER (PRD Section 5 & Section 19.4)
+async function openRunDialog(f) {
+  pendingFile = f;
+  document.getElementById('dlg-icon').innerHTML = iconForFile(f.name, false);
+  document.getElementById('dlg-title').textContent = f.name;
+  document.getElementById('dlg-info').textContent = f.isRealAndroid
+    ? `Real Android File: ${f.path} (will stage to C:\\Temp\\android_stage)`
+    : `Windows VFS Path: ${f.path}`;
+  document.getElementById('dlg-args').value = '';
+  document.getElementById('rundlg').classList.add('vis');
+  await updateRunPreview();
+}
+
+async function updateRunPreview() {
+  if (!pendingFile) return;
+  const stagedPath = await ensureFileStagedForBackend(pendingFile);
+  if (!stagedPath) return;
+  const args = document.getElementById('dlg-args').value;
+  const probe = await callRustApi('wsr_probe_file', { file_path: stagedPath, args });
+  pendingProbe = probe;
+  const prev = document.getElementById('dlg-preview');
+  const execBtn = document.getElementById('dlg-btn-exec');
+  const isPeBinary = /\.(exe|scr)$/i.test(pendingFile.name);
+
+  if (probe && probe.status === 'ok') {
+    prev.textContent = `Mode:        [${probe.mode}]\nFormat:      ${probe.format_label}\nSubsystem:   ${probe.is_gui_pe ? 'Win32 GUI Application' : 'Console / Script'}\nAssessment:  ${probe.reason}\nLaunch Plan: ${probe.launch_plan}`;
+    if (isPeBinary) {
+      execBtn.disabled = false;
+      execBtn.textContent = probe.can_execute ? 'Launch Windows App' : 'Verify & Check GUI Runtime';
+    } else {
+      execBtn.disabled = !probe.can_execute;
+      execBtn.textContent = probe.can_execute ? 'Execute' : 'Unsupported Runtime';
+    }
+  } else {
+    prev.textContent = `Mode: [${pendingFile.mode}]\nFile: ${pendingFile.path}`;
+    execBtn.disabled = !pendingFile.can_execute;
+  }
+}
+
+function closeDlg() {
+  document.getElementById('rundlg').classList.remove('vis');
+  pendingFile = null;
+}
+
+async function confirmRun() {
+  if (!pendingFile) return;
+  const f = pendingFile;
+  const args = document.getElementById('dlg-args').value;
+  closeDlg();
+
+  const stagedPath = await ensureFileStagedForBackend(f);
+  if (!stagedPath) return;
+
+  // If this is a Windows .exe or .scr binary, route through PRD Section 19 GUI/PE Session Lifecycle
+  if (/\.(exe|scr)$/i.test(f.name)) {
+    await launchWindowsPeWithGuiFlow(f, stagedPath, args);
+    return;
+  }
+
+  if (termState === 'collapsed') applyTermState('half');
+  setJobStatus('RUNNING', true);
+  tlog(`\n[JOB START] ${stagedPath} ${args}`, 'li');
+  const res = await callRustApi('wsr_run_script', { file_path: stagedPath, args, cwd: CWD });
+  setJobStatus('IDLE', false);
+
+  if (res && res.status === 'ok') {
+    if (res.title) document.getElementById('win-title').textContent = res.title;
+    if (res.stdout) res.stdout.split('\n').forEach(l => tlog(l, 'lo'));
+    if (res.stderr) res.stderr.split('\n').forEach(l => tlog(l, 'le'));
+    const stColor = res.state === 'completed' ? 'lk' : (res.state === 'unsupported' ? 'lw' : 'le');
+    tlog(`[Job #${res.job_id} ${res.state.toUpperCase()} | Mode: ${res.mode} | Exit Code: ${res.exit}]`, stColor);
+    if (res.cwd_win && res.cwd_win !== CWD && !currentAndroidSlot) {
+      nav(res.cwd_win, false);
+    } else {
+      refresh();
+    }
+  } else {
+    tlog(`[ERROR] Execution failed: ${res?.error || 'Backend unreachable'}`, 'le');
+  }
+}
+
+// WINDOWS GUI APPLICATION LIFECYCLE & DISPLAY SURFACE (PRD Section 19)
+async function launchWindowsPeWithGuiFlow(fileObj, stagedWinPath, args) {
+  activeGuiFile = fileObj;
+  const guiView = document.getElementById('gui-view');
+  const badge = document.getElementById('gui-state-badge');
+  const stepList = document.getElementById('gui-step-list');
+  const diag = document.getElementById('gui-card-diag');
+  const canvas = document.getElementById('gui-canvas');
+  const card = document.getElementById('gui-lifecycle-card');
+
+  canvas.style.display = 'none';
+  card.style.display = 'flex';
+  guiView.classList.add('vis');
+
+  badge.textContent = 'ANALYZING';
+  document.getElementById('gui-card-title').textContent = `Launching ${fileObj.name}`;
+  stepList.innerHTML = `<div>[1/4] Analyzing PE header & CPU architecture...</div>`;
+  diag.textContent = 'Validating DOS MZ and PE\\0\\0 signature...';
+
+  const res = await callRustApi('wsr_launch_pe_gui', { file_path: stagedWinPath, args, timeout_sec: '8' });
+  if (!res || res.status !== 'ok') {
+    badge.textContent = 'UNSUPPORTED';
+    diag.textContent = res?.error || 'Cannot connect to native PE execution service.';
+    return;
+  }
+
+  activeGuiSessionId = res.session_id || 0;
+  badge.textContent = res.state;
+  document.getElementById('gui-card-sub').textContent = `${res.arch} | ${res.subsystem}`;
+
+  stepList.innerHTML = `
+    <div>[1/4] PE Validation: ${esc(res.arch)} (${esc(res.subsystem)})</div>
+    <div>[2/4] Runtime Selected: ${esc(res.runtime_used)}</div>
+    <div>[3/4] Session State: ${esc(res.state)}</div>
+    <div>[4/4] Display Surface: ${res.display_bridge_url ? esc(res.display_bridge_url) : 'No X11/RFB window created'}</div>`;
+  diag.textContent = res.status_message;
+
+  // If the executable is Console-subsystem and running/exited, route output to Command Prompt (PRD Section 19.2)
+  if (!res.is_gui_subsystem && (res.state === 'CONSOLE_RUNNING' || res.state === 'EXITED')) {
+    closeGuiView();
+    if (termState === 'collapsed') applyTermState('half');
+    tlog(`\n[PE CONSOLE] ${stagedWinPath}`, 'li');
+    if (res.stdout) res.stdout.split('\n').forEach(l => tlog(l, 'lo'));
+    if (res.stderr) res.stderr.split('\n').forEach(l => tlog(l, 'le'));
+    tlog(`[PE Process ${res.state} | Exit Code: ${res.exit_code}]`, res.exit_code === 0 ? 'lk' : 'le');
+    return;
+  }
+
+  // Only show the interactive window canvas if a real runtime created an actual visible window (PRD Section 19.2)
+  if (res.state === 'GUI_VISIBLE' && res.windows && res.windows.length > 0) {
+    card.style.display = 'none';
+    canvas.style.display = 'block';
+    renderWindowSwitcher(res.windows);
+    attachCanvasInputBridge(canvas);
+  } else {
+    renderWindowSwitcher([]);
+  }
+}
+
+function renderWindowSwitcher(windows) {
+  const sw = document.getElementById('gui-win-switcher');
+  sw.innerHTML = '';
+  windows.forEach((w, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'gui-win-tab' + (idx === 0 ? ' active' : '');
+    btn.textContent = `${w.title} (${w.width}x${w.height})`;
+    sw.appendChild(btn);
+  });
+}
+
+function attachCanvasInputBridge(canvas) {
+  let pressTimer = null;
+  canvas.onpointerdown = e => {
+    const rect = canvas.getBoundingClientRect();
+    lastPointerX = Math.round((e.clientX - rect.left) * (canvas.width / rect.width));
+    lastPointerY = Math.round((e.clientY - rect.top) * (canvas.height / rect.height));
+    pressTimer = setTimeout(() => {
+      sendGuiMouseAt('right_click', lastPointerX, lastPointerY);
+      pressTimer = null;
+    }, 550);
+  };
+  canvas.onpointerup = () => {
+    if (pressTimer) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+      sendGuiMouseAt('click', lastPointerX, lastPointerY);
+    }
+  };
+  canvas.onpointermove = e => {
+    if (e.buttons > 0 || pointerTrackpadMode) {
+      const rect = canvas.getBoundingClientRect();
+      lastPointerX = Math.round((e.clientX - rect.left) * (canvas.width / rect.width));
+      lastPointerY = Math.round((e.clientY - rect.top) * (canvas.height / rect.height));
+      sendGuiMouseAt('move', lastPointerX, lastPointerY);
+    }
+  };
+}
+
+function togglePointerMode() {
+  pointerTrackpadMode = !pointerTrackpadMode;
+  const btn = document.getElementById('btn-ptr-mode');
+  btn.textContent = pointerTrackpadMode ? 'Mode: Trackpad' : 'Mode: Touch';
+  btn.classList.toggle('active', pointerTrackpadMode);
+}
+
+function resetGuiZoom() {
+  guiZoom = 1.0;
+  document.getElementById('gui-canvas').style.transform = 'scale(1)';
+}
+
+async function sendGuiMouseAt(evType, x, y) {
+  if (!activeGuiSessionId) return;
+  await callRustApi('wsr_gui_input', {
+    session_id: String(activeGuiSessionId),
+    event_type: evType,
+    x: String(x),
+    y: String(y),
+    key_or_text: ''
+  });
+}
+
+function sendGuiMouseClick(evType) {
+  sendGuiMouseAt(evType, lastPointerX, lastPointerY);
+}
+
+async function sendGuiKey(keyName) {
+  if (!activeGuiSessionId) return;
+  await callRustApi('wsr_gui_input', {
+    session_id: String(activeGuiSessionId),
+    event_type: 'key',
+    x: '0',
+    y: '0',
+    key_or_text: keyName
+  });
+}
+
+async function guiKbdKey(e) {
+  if (e.key === 'Enter') {
+    const val = e.target.value;
+    e.target.value = '';
+    if (val && activeGuiSessionId) {
+      await callRustApi('wsr_gui_input', {
+        session_id: String(activeGuiSessionId),
+        event_type: 'text',
+        x: '0',
+        y: '0',
+        key_or_text: val
+      });
+    }
+  }
+}
+
+async function terminateCurrentGuiSession() {
+  if (activeGuiSessionId) {
+    await callRustApi('wsr_terminate_gui', { session_id: String(activeGuiSessionId) });
+    activeGuiSessionId = 0;
+  }
+  closeGuiView();
+}
+
+function closeGuiView() {
+  document.getElementById('gui-view').classList.remove('vis');
+}
+
+// STATIC PE & REGISTRY ANALYSIS MODAL
+async function inspectSelected() {
+  if (!sel) {
+    await openInputModal('Select a File', 'Select a file in the list first to inspect its PE header, registry entries, or execution capabilities.', '', true);
+    return;
+  }
+  await openAnalyzeModal(sel);
+}
+
+async function openAnalyzeModal(f) {
+  document.getElementById('anal-icon').innerHTML = iconForFile(f.name, f.isDir);
+  document.getElementById('anal-title').textContent = `Analysis: ${f.name}`;
+  const body = document.getElementById('anal-body');
+  const footer = document.getElementById('anal-footer');
+  body.innerHTML = `<div class="empty"><div class="spin"></div><span>Inspecting ${esc(f.name)}...</span></div>`;
+  footer.innerHTML = `<button class="btn" onclick="closeAnalyzeModal()">Close</button>`;
+  document.getElementById('analdlg').classList.add('vis');
+
+  const targetPath = await ensureFileStagedForBackend(f);
+  if (!targetPath) return;
+
+  if (/\.reg$/i.test(f.name)) {
+    const res = await callRustApi('wsr_preview_reg', { file_path: targetPath, apply: 'false' });
+    if (res && res.status === 'ok') {
+      body.innerHTML = `
+        <div class="dlg-info">Path: ${esc(targetPath)}</div>
+        <div class="dlg-warn">Isolated Virtual Registry Preview: Applying this file updates the sandboxed VFS registry (~/.wsr_vfs/virtual_registry.conf) and never modifies Android system settings.</div>
+        <div class="dlg-preview">${esc(res.report)}</div>`;
+      footer.innerHTML = `
+        <button class="btn" onclick="closeAnalyzeModal()">Cancel</button>
+        <button class="btn pri" onclick="applyRegFromModal('${esc(targetPath.replace(/\\/g,'\\\\'))}')">Apply to VFS Registry</button>`;
+      return;
+    }
+  }
+
+  if (/\.(exe|dll|msi|scr|com)$/i.test(f.name)) {
+    const pe = await callRustApi('wsr_inspect_exe', { file_path: targetPath });
+    if (pe && pe.status === 'ok') {
+      const secs = (pe.sections && pe.sections.length) ? pe.sections.join('\n') : 'None';
+      const dlls = (pe.imported_dlls && pe.imported_dlls.length) ? pe.imported_dlls.join(', ') : 'None detected';
+      body.innerHTML = `
+        <div class="pe-grid">
+          <div class="pe-k">Windows Path:</div><div class="pe-v">${esc(pe.win_path)}</div>
+          <div class="pe-k">Android Path:</div><div class="pe-v">${esc(pe.android_path)}</div>
+          <div class="pe-k">Header Status:</div><div class="pe-v">${esc(pe.pe_status)} (Valid PE: ${pe.is_valid_pe ? 'Yes' : 'No'})</div>
+          <div class="pe-k">Architecture:</div><div class="pe-v">${esc(pe.arch)}</div>
+          <div class="pe-k">Subsystem:</div><div class="pe-v">${esc(pe.subsystem)}</div>
+          <div class="pe-k">Entry Point:</div><div class="pe-v">${esc(pe.entry_point)} (ImageBase: ${esc(pe.image_base)})</div>
+          <div class="pe-k">.NET / CLR:</div><div class="pe-v">${pe.is_dotnet ? 'Yes (Managed CIL)' : 'No (Native Binary)'}</div>
+          <div class="pe-k">Support Mode:</div><div class="pe-v"><span class="mbadge ${badgeClassForMode(pe.support_level.replace('_',' '))}">${esc(pe.support_level)}</span></div>
+        </div>
+        <div class="dlg-warn">${esc(pe.support_reason)}</div>
+        <label class="dlg-label">PE Sections:</label>
+        <div class="dlg-preview">${esc(secs)}</div>
+        <label class="dlg-label">Imported DLLs:</label>
+        <div class="dlg-preview">${esc(dlls)}</div>`;
+      return;
+    }
+  }
+
+  const probe = await callRustApi('wsr_probe_file', { file_path: targetPath, args: '' });
+  if (probe && probe.status === 'ok') {
+    body.innerHTML = `
+      <div class="pe-grid">
+        <div class="pe-k">Windows Path:</div><div class="pe-v">${esc(probe.file_path)}</div>
+        <div class="pe-k">Android Path:</div><div class="pe-v">${esc(probe.android_path)}</div>
+        <div class="pe-k">Format:</div><div class="pe-v">${esc(probe.format_label)}</div>
+        <div class="pe-k">Execution Mode:</div><div class="pe-v"><span class="mbadge ${badgeClassForMode(probe.mode)}">${esc(probe.mode)}</span></div>
+        <div class="pe-k">Launch Plan:</div><div class="pe-v">${esc(probe.launch_plan)}</div>
+      </div>
+      <div class="dlg-preview">${esc(probe.reason)}</div>`;
+  } else {
+    body.innerHTML = `<div class="dlg-preview">File: ${esc(f.path)}\nFormat: ${esc(f.format_label)}</div>`;
+  }
+}
+
+async function applyRegFromModal(winPath) {
+  const res = await callRustApi('wsr_preview_reg', { file_path: winPath, apply: 'true' });
+  closeAnalyzeModal();
+  if (res && res.status === 'ok') {
+    tlog(`\n[VIRTUAL REGISTRY APPLIED] ${winPath}`, 'lk');
+    res.report.split('\n').forEach(l => tlog(l, 'lo'));
+  }
+}
+
+function closeAnalyzeModal() {
+  document.getElementById('analdlg').classList.remove('vis');
+}
+
+// TEXT EDITOR MODAL
+async function editSelected() {
+  if (!sel || sel.isDir) {
+    await openInputModal('Select a File', 'Select a script or text file first to view or edit.', '', true);
+    return;
+  }
+  await openEditorModal(sel);
+}
+
+async function openEditorModal(f) {
+  const targetPath = await ensureFileStagedForBackend(f);
+  if (!targetPath) return;
+  editingFile = { ...f, stagedPath: targetPath };
+  document.getElementById('edit-title').textContent = `Edit: ${f.name}`;
+  document.getElementById('edit-path').textContent = f.isRealAndroid
+    ? `Staged Copy: ${targetPath} (Use 'Export to Android' to save back to external folder)`
+    : targetPath;
+  document.getElementById('edit-area').value = 'Loading...';
+  document.getElementById('editdlg').classList.add('vis');
+  const res = await callRustApi('wsr_read_script', { file_path: targetPath });
+  document.getElementById('edit-area').value = (res && res.status === 'ok') ? res.content : '';
+}
+
+function closeEditorModal() {
+  document.getElementById('editdlg').classList.remove('vis');
+  editingFile = null;
+}
+
+async function saveEditedFile() {
+  if (!editingFile) return;
+  const content = document.getElementById('edit-area').value;
+  const savePath = editingFile.stagedPath || editingFile.path;
+  const res = await callRustApi('wsr_write_file', { file_path: savePath, content });
+  closeEditorModal();
+  if (res && res.status === 'ok') {
+    tlog(`[SAVED] ${res.win_path}`, 'lk');
+    refresh();
+  } else {
+    tlog(`[ERROR] Failed saving file: ${res?.error || 'Unknown error'}`, 'le');
+  }
+}
+
+// FILE OPERATIONS & SAF IMPORT/EXPORT (PRD Section 20.3)
+function runSelected() {
+  if (!sel) { tlog('Select a file first.', 'lw'); return; }
+  if (sel.isDir) { nav(sel.path); return; }
+  openRunDialog(sel);
+}
+
+function copyPath() {
+  const target = sel ? sel.path : CWD;
+  navigator.clipboard?.writeText(target).then(() => tlog(`Copied path: ${target}`, 'lk'));
+}
+
+async function newFile() {
+  const name = await openInputModal('Create New Script / File', `Enter file name inside ${CWD}:`, 'new_script.bat');
+  if (!name) return;
+  const target = CWD.replace(/[\\/]$/, '') + '\\' + name;
+  const defaultBody = /\.(bat|cmd)$/i.test(name)
+    ? '@echo off\r\necho Running ' + name + ' in %CD%\r\nexit /b 0\r\n'
+    : '';
+  const res = await callRustApi('wsr_write_file', { file_path: target, content: defaultBody });
+  if (res && res.status === 'ok') {
+    tlog(`[CREATED] ${res.win_path}`, 'lk');
+    await refresh();
+  } else {
+    tlog(`[ERROR] ${res?.error || 'Could not create file'}`, 'le');
+  }
+}
+
+async function newFolder() {
+  const name = await openInputModal('New Folder', `Create folder inside ${CWD}:`, 'New_Folder');
+  if (!name) return;
+  if (currentAndroidSlot && typeof window.AndroidSAF !== 'undefined' && window.AndroidSAF.createSafSubfolder) {
+    const raw = window.AndroidSAF.createSafSubfolder(currentAndroidSlot, name);
+    const res = JSON.parse(raw);
+    if (res.status === 'ok') {
+      tlog(`[SAF MKDIR] Created folder '${name}' in Android ${currentAndroidSlot}`, 'lk');
+      refresh();
+      return;
+    }
+  }
+  const target = CWD.replace(/[\\/]$/, '') + '\\' + name;
+  const res = await callRustApi('wsr_mkdir', { path: target });
+  if (res && res.status === 'ok') {
+    tlog(`[MKDIR] ${res.win_path}`, 'lk');
+    refresh();
+  } else {
+    tlog(`[ERROR] ${res?.error || 'Could not create folder'}`, 'le');
+  }
+}
+
+function importSafFile() {
+  if (typeof window.AndroidSAF !== 'undefined' && window.AndroidSAF.pickFile) {
+    window.AndroidSAF.pickFile('C:\\Users\\Admin\\Desktop');
+  } else {
+    document.getElementById('saf-file-input').click();
+  }
+}
+
+async function handleSafFilePicked(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const text = await file.text();
+  const target = 'C:\\Users\\Admin\\Desktop\\' + file.name;
+  const res = await callRustApi('wsr_write_file', { file_path: target, content: text });
+  if (res && res.status === 'ok') {
+    tlog(`[SAF IMPORT] Imported ${file.name} -> ${res.win_path}`, 'lk');
+    nav('C:\\Users\\Admin\\Desktop', false);
+  }
+  e.target.value = '';
+}
+
+window.onSafFileImported = function(winPath) {
+  tlog(`[SAF IMPORT] Imported external file -> ${winPath}`, 'lk');
+  refresh();
+};
+
+window.onSafFileExported = function(srcWinPath) {
+  tlog(`[SAF EXPORT] Exported ${srcWinPath} to Android storage.`, 'lk');
+};
+
+async function exportSelectedToAndroid() {
+  if (!sel || sel.isDir) {
+    await openInputModal('Select a VFS File', 'Select a file in the Windows VFS first to export it to an Android folder.', '', true);
+    return;
+  }
+  if (typeof window.AndroidSAF !== 'undefined' && window.AndroidSAF.exportFileToAndroid) {
+    window.AndroidSAF.exportFileToAndroid(sel.path, sel.name);
+  } else {
+    tlog(`[INFO] Export via SAF Document Creator requires running inside the Android APK.`, 'lw');
+  }
+}
+
+async function checkEnv() {
+  if (termState === 'collapsed') applyTermState('half');
+  const res = await callRustApi('wsr_check_environment', {});
+  if (res && res.report) {
+    tlog('', 'lo');
+    res.report.split('\n').forEach(l => tlog(l, 'lo'));
+  }
+}
+
+function showHelp() {
+  if (termState === 'collapsed') applyTermState('half');
+  tclear();
+  tlog('=== Windows Script Runner — Format & Storage Matrix (PRD v5.0) ===', 'li');
+  tlog('Real Android Storage: Connect Downloads, Documents, Pictures, Music, Movies via SAF / MediaStore', 'lk');
+  tlog('.bat / .cmd  [INTERPRETED]   Built-in Rust Batch/CMD Interpreter', 'lk');
+  tlog('.reg         [INTERPRETED]   Registry Parser + Isolated Virtual Registry preview/apply', 'lk');
+  tlog('.exe / .scr  [GUI / CONSOLE] PE32/PE32+ Header Verification + Windows GUI Display & Input Bridge', 'lw');
+  tlog('.dll / .msi  [ANALYSIS ONLY] Static PE / OLE2 Package Inspector', 'lw');
+}
+
+// CONTEXT MENU
+function showCtx(e, f) {
+  const m = document.getElementById('ctxmenu');
+  document.getElementById('ctx-run').style.display = !f.isDir ? 'flex' : 'none';
+  document.getElementById('ctx-anal').style.display = !f.isDir ? 'flex' : 'none';
+  const x = e.clientX || (innerWidth / 2);
+  const y = e.clientY || (innerHeight / 2);
+  m.style.left = Math.min(x, innerWidth - 230) + 'px';
+  m.style.top  = Math.min(y, innerHeight - 310) + 'px';
+  m.classList.add('vis');
+}
+function hideCtx()          { document.getElementById('ctxmenu').classList.remove('vis'); }
+function ctxRun()           { hideCtx(); if (sel) openRunDialog(sel); }
+function ctxInspect()       { hideCtx(); if (sel) openAnalyzeModal(sel); }
+function ctxEdit()          { hideCtx(); if (sel) openEditorModal(sel); }
+function ctxCopyPath()      { hideCtx(); copyPath(); }
+async function ctxImportVfs(){ hideCtx(); if (sel) await ensureFileStagedForBackend(sel); }
+function ctxExportAndroid() { hideCtx(); exportSelectedToAndroid(); }
+
+async function ctxRename() {
+  hideCtx();
+  if (!sel) return;
+  const n = await openInputModal('Rename Item', `Enter new name for "${sel.name}":`, sel.name);
+  if (!n || n === sel.name) return;
+  if (sel.isRealAndroid && sel.contentUri && typeof window.AndroidSAF !== 'undefined' && window.AndroidSAF.renameSafDocument) {
+    const raw = window.AndroidSAF.renameSafDocument(sel.contentUri, n);
+    const r = JSON.parse(raw);
+    if (r.status === 'ok') { tlog(`[SAF RENAMED] ${sel.name} -> ${n}`, 'lk'); refresh(); return; }
+  }
+  const dst = CWD.replace(/[\\/]$/, '') + '\\' + n;
+  const res = await callRustApi('wsr_rename', { src: sel.path, dst });
+  if (res && res.status === 'ok') {
+    tlog(`[RENAMED] ${sel.name} -> ${n}`, 'lk');
+    refresh();
+  } else {
+    tlog(`[ERROR] ${res?.error || 'Rename failed'}`, 'le');
+  }
+}
+
+async function ctxDuplicate() {
+  hideCtx();
+  if (!sel || sel.isDir) return;
+  const dst = CWD.replace(/[\\/]$/, '') + '\\Copy_of_' + sel.name;
+  const res = await callRustApi('wsr_copy', { src: sel.path, dst });
+  if (res && res.status === 'ok') {
+    tlog(`[COPIED] ${res.win_path}`, 'lk');
+    refresh();
+  } else {
+    tlog(`[ERROR] ${res?.error || 'Copy failed'}`, 'le');
+  }
+}
+
+function ctxProps() {
+  hideCtx();
+  if (!sel) return;
+  const kind = sel.isRealAndroid ? 'Real Android Storage File (SAF / MediaStore)' : 'Virtual Windows VFS File';
+  openInputModal(
+    `File Details: ${sel.name}`,
+    `Storage Type: ${kind}\nWindows Path: ${sel.path}\nBacking URI / Path: ${sel.contentUri || sel.androidPath || 'App-Private VFS'}\nFormat: ${sel.format_label}\nExecution Mode: ${sel.mode}\nSize: ${fmtSize(sel.size)}`,
+    '',
+    true
+  );
+}
+
+async function ctxDelete() {
+  hideCtx();
+  if (!sel) return;
+  const ok = await openInputModal('Confirm Delete', `Delete "${sel.name}" permanently?`, 'yes', true);
+  if (ok === null) return;
+  if (sel.isRealAndroid && sel.contentUri && typeof window.AndroidSAF !== 'undefined' && window.AndroidSAF.deleteSafDocument) {
+    const raw = window.AndroidSAF.deleteSafDocument(sel.contentUri);
+    const r = JSON.parse(raw);
+    if (r.status === 'ok') { tlog(`[SAF DELETED] ${sel.name}`, 'lk'); sel = null; refresh(); return; }
+  }
+  const res = await callRustApi('wsr_delete', { path: sel.path });
+  if (res && res.status === 'ok') {
+    tlog(`[DELETED] ${sel.path}`, 'lk');
+    sel = null;
+    refresh();
+  } else {
+    tlog(`[ERROR] ${res?.error || 'Delete failed'}`, 'le');
+  }
+}
+
+// CONSOLE / TERMINAL
+function tlog(text, cls = 'lo') {
+  const o = document.getElementById('tout');
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = text;
+  o.appendChild(d);
+  o.scrollTop = o.scrollHeight;
+}
+function tclear() { document.getElementById('tout').innerHTML = ''; }
+
+function copyTermOutput() {
+  const text = Array.from(document.getElementById('tout').children).map(el => el.textContent).join('\n');
+  navigator.clipboard?.writeText(text).then(() => tlog('[Console output copied to clipboard]', 'lk'));
+}
+
+function changeTermFont(delta) {
+  termFontSize = Math.max(10, Math.min(18, termFontSize + delta));
+  document.documentElement.style.setProperty('--term-font', termFontSize + 'px');
+  sSet('wsr_termFont', String(termFontSize));
+}
+
+function applyTermState(st) {
+  termState = st;
+  sSet('wsr_termState', st);
+  const el = document.getElementById('term');
+  el.className = 'term state-' + st;
+  const tog = document.getElementById('term-tog');
+  if (tog) tog.innerHTML = st === 'collapsed' ? SVGS.chevUp : SVGS.chevDown;
+}
+
+function cycleTermHeight() {
+  const order = ['half', 'expanded', 'collapsed'];
+  const next = order[(order.indexOf(termState) + 1) % order.length];
+  applyTermState(next);
+}
+
+function setJobStatus(stateText, running = false) {
+  const pill = document.getElementById('job-pill');
+  pill.textContent = stateText;
+  pill.classList.toggle('running', running);
+  document.getElementById('btn-stop-job').disabled = !running;
+}
+
+async function stopActiveJob() {
+  await callRustApi('wsr_cancel_job', {});
+  setJobStatus('CANCELLED', false);
+  tlog('[Job Cancelled by user]', 'lw');
+}
+
+function openInputModal(title, msg, defaultVal = '', isConfirmOnly = false) {
+  return new Promise(resolve => {
+    inputResolver = resolve;
+    document.getElementById('idlg-title').textContent = title;
+    document.getElementById('idlg-msg').textContent = msg;
+    const inp = document.getElementById('idlg-val');
+    inp.style.display = isConfirmOnly ? 'none' : 'block';
+    inp.value = defaultVal;
+    document.getElementById('inputdlg').classList.add('vis');
+    if (!isConfirmOnly) setTimeout(() => { inp.focus(); inp.select(); }, 40);
+  });
+}
+
+function closeInputDlg(val) {
+  document.getElementById('inputdlg').classList.remove('vis');
+  if (inputResolver) {
+    const r = inputResolver;
+    inputResolver = null;
+    r(val);
+  }
+}
+
+async function submitTermInput() {
+  const inp = document.getElementById('tinput');
+  const cmd = inp.value.trim();
+  if (!cmd) return;
+  cmdHist.unshift(cmd);
+  if (cmdHist.length > 50) cmdHist.pop();
+  sSet('wsr_cmdHist', JSON.stringify(cmdHist));
+  cmdIdx = -1;
+  inp.value = '';
+
+  if (/^(cls|clear)$/i.test(cmd)) { tclear(); return; }
+
+  tlog(`${CWD}> ${cmd}`, 'li');
+  setJobStatus('RUNNING', true);
+  const res = await callRustApi('wsr_exec_command', { cmd, cwd: CWD });
+  setJobStatus('IDLE', false);
+
+  if (res && res.status === 'ok') {
+    if (res.title) document.getElementById('win-title').textContent = res.title;
+    if (res.stdout) res.stdout.split('\n').forEach(l => tlog(l, 'lo'));
+    if (res.stderr) res.stderr.split('\n').forEach(l => tlog(l, 'le'));
+    if (res.cwd_win && res.cwd_win !== CWD) {
+      await nav(res.cwd_win, true);
+    } else {
+      await refresh();
+    }
+  } else {
+    tlog(`[ERROR] ${res?.error || 'Command execution failed'}`, 'le');
+  }
+}
+
+function termKey(e) {
+  const inp = document.getElementById('tinput');
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    submitTermInput();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (cmdIdx < cmdHist.length - 1) { cmdIdx++; inp.value = cmdHist[cmdIdx]; }
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (cmdIdx > 0) { cmdIdx--; inp.value = cmdHist[cmdIdx]; }
+    else { cmdIdx = -1; inp.value = ''; }
+  } else if (e.key === 'c' && e.ctrlKey) {
+    e.preventDefault();
+    stopActiveJob();
+  }
+}
+
+function focusPath() {
+  document.getElementById('bcrumbs').style.display = 'none';
+  const inp = document.getElementById('pinput');
+  inp.style.display = 'block';
+  inp.value = CWD;
+  inp.focus();
+  inp.select();
+}
+function blurPath() {
+  document.getElementById('bcrumbs').style.display = 'flex';
+  document.getElementById('pinput').style.display = 'none';
+}
+function pathKey(e) {
+  if (e.key === 'Enter') {
+    nav(document.getElementById('pinput').value.trim());
+    document.getElementById('pinput').blur();
+  }
+  if (e.key === 'Escape') document.getElementById('pinput').blur();
+}
+
+function filterFiles() { renderFiles(); }
+function sortBy(f) {
+  if (sortF === f) sortAsc = !sortAsc;
+  else { sortF = f; sortAsc = true; }
+  sSet('wsr_sortF', sortF);
+  sSet('wsr_sortAsc', String(sortAsc));
+  renderFiles();
+}
+function setTypeFilter(ext, el) {
+  typeF = ext;
+  document.querySelectorAll('#sec-flt .si').forEach(e => e.classList.remove('on'));
+  if (el) el.classList.add('on');
+  const bar = document.getElementById('filter-chip-bar');
+  if (typeF) {
+    bar.classList.add('vis');
+    document.getElementById('filter-chip-text').textContent = `Active Filter: ${typeF}`;
+  } else {
+    bar.classList.remove('vis');
+  }
+  if (isNarrowScreen()) closeMobileDrawer();
+  renderFiles();
+}
+
+document.addEventListener('click', e => {
+  if (!document.getElementById('ctxmenu').contains(e.target)) hideCtx();
+  if (!document.getElementById('overflow-menu').contains(e.target)) hideOverflow();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (document.body.classList.contains('nav-open-mobile')) { closeMobileDrawer(); return; }
+    if (document.getElementById('gui-view').classList.contains('vis')) { closeGuiView(); return; }
+    closeDlg(); closeAnalyzeModal(); closeEditorModal(); closeInputDlg(null); hideCtx(); hideOverflow();
+  }
+});
+
+// INIT
+if (!isNarrowScreen() && sGet('wsr_nav_collapsed_desktop', '0') === '1') {
+  document.body.classList.add('nav-collapsed');
+}
+nav(CWD, false);
+setTimeout(() => {
+  tlog('Microsoft Windows [Version 10.0.22631.4317 - Rust VFS, Real Android SAF & GUI Bridge v5.0]', 'lk');
+  tlog('Open the navigation drawer to connect Real Android Folders (Downloads, Documents, Pictures, Music, Movies) or run VFS scripts.', 'li');
+}, 200);
+</script>
+</body>
+</html>
