@@ -1,9 +1,9 @@
 [package]
 name = "windows-script-runner"
-version = "5.0.0"
+version = "6.0.0"
 edition = "2021"
 authors = ["Rajdeep Yaduvanshi <vanta@antigem.dev>"]
-description = "Windows File System (C:/D:/Z:), Real Android SAF/MediaStore Storage Bridge, Windows GUI Display/Input Bridge, Batch/CMD Interpreter, and Honest PE Analyzer in pure Rust."
+description = "Windows File System (C:/D:/Z:), Real Android SAF Storage, x86/x64/ARM64/ARM64EC PE Analyzer, Box64+Wine64 Runtime Manager, and Live X11 GUI Display Bridge in pure Rust."
 license = "MIT"
 
 [lib]

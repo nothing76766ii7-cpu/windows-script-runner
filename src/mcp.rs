@@ -1,12 +1,15 @@
-//! JSON API & MCP Dispatcher for Windows Script Runner (PRD v5.0 — GUI Sessions + Real Android Storage).
+//! JSON API & MCP Dispatcher for Windows Script Runner (v6.0 — Runtime Diagnostics, Installer & Live X11 Frame Bridge).
 
-use crate::gui_session::{forward_gui_input, launch_pe_session, terminate_gui_session};
+use crate::gui_session::{
+    capture_x11_frame_base64, forward_gui_input, launch_pe_session, terminate_gui_session,
+};
 use crate::pe::{format_pe_summary, inspect_pe_file};
 use crate::reg::{format_reg_report, parse_and_apply_reg, read_reg_file};
 use crate::runner::{
     cancel_active_job, execute_job, expand_tilde, list_directory_native, probe_file,
     replace_extension, run_environment_check,
 };
+use crate::runtime_mgr::{probe_runtime_environment, run_runtime_installer};
 use crate::transpiler::transpile_bat;
 use crate::vfs::WinVfs;
 use std::fs;
@@ -63,44 +66,36 @@ pub fn extract_json_str(json: &str, key: &str) -> Option<String> {
 pub fn mcp_tools_schema_json() -> &'static str {
     r#"[
   {
+    "name": "wsr_runtime_diagnostics",
+    "description": "Return full runtime diagnostics: installed components (Box64, Wine64 x64, Wine ARM64, Xvfb, xdotool, Mono), supported PE architectures (x86, x64, ARM64, ARM64EC), and technical blockers.",
+    "input_schema": { "type": "object", "properties": {} }
+  },
+  {
+    "name": "wsr_install_runtime",
+    "description": "Generate and execute the Box64 + Wine64 + Xvfb runtime installer script and validate installed components.",
+    "input_schema": { "type": "object", "properties": {} }
+  },
+  {
     "name": "wsr_list_directory",
-    "description": "List files and folders in a Windows VFS drive (C:\\, D:\\, Z:\\) or user-authorized Android storage folder.",
+    "description": "List files and folders in a Windows VFS drive or authorized Android storage folder.",
     "input_schema": {
       "type": "object",
-      "properties": {
-        "path": { "type": "string", "description": "Windows drive path (e.g. C:\\Users\\Admin\\Desktop or C:\\Users\\Admin\\Downloads)" }
-      },
+      "properties": { "path": { "type": "string" } },
       "required": ["path"]
     }
   },
   {
-    "name": "wsr_probe_file",
-    "description": "Probe a file to determine its execution mode (NATIVE, INTERPRETED, EMULATED, ANALYSIS ONLY, UNSUPPORTED), PE subsystem, and launch plan.",
+    "name": "wsr_inspect_exe",
+    "description": "Inspect a Windows PE (.exe, .dll, .scr, .com, .msi) file and separately classify x86, x64, ARM64, and ARM64EC.",
     "input_schema": {
       "type": "object",
-      "properties": {
-        "file_path": { "type": "string" },
-        "args": { "type": "string" }
-      },
-      "required": ["file_path"]
-    }
-  },
-  {
-    "name": "wsr_run_script",
-    "description": "Execute a supported script (.bat, .cmd, .reg, .sh, or runtime-verified .ps1/.vbs) via the Job Manager.",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "file_path": { "type": "string" },
-        "args": { "type": "string" },
-        "cwd": { "type": "string" }
-      },
+      "properties": { "file_path": { "type": "string" } },
       "required": ["file_path"]
     }
   },
   {
     "name": "wsr_launch_pe_gui",
-    "description": "Validate and launch a Windows PE (.exe, .scr) binary with GUI/Console window detection and display bridge tracking (PRD Section 19).",
+    "description": "Validate and launch a Windows PE executable under the matching runtime with X11 window detection and live frame capture.",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -109,21 +104,6 @@ pub fn mcp_tools_schema_json() -> &'static str {
         "timeout_sec": { "type": "string" }
       },
       "required": ["file_path"]
-    }
-  },
-  {
-    "name": "wsr_gui_input",
-    "description": "Forward Android touch, mouse click, scroll, or keyboard input to an active Windows GUI window session.",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "session_id": { "type": "string" },
-        "event_type": { "type": "string" },
-        "x": { "type": "string" },
-        "y": { "type": "string" },
-        "key_or_text": { "type": "string" }
-      },
-      "required": ["session_id", "event_type"]
     }
   }
 ]"#
@@ -134,6 +114,76 @@ pub fn handle_mcp_call(tool_name: &str, raw_args_json: &str) -> String {
     let _ = vfs.ensure_initialized();
 
     match tool_name {
+        "wsr_runtime_diagnostics" => {
+            let d = probe_runtime_environment();
+            let comps_json: Vec<String> = d
+                .components
+                .iter()
+                .map(|c| {
+                    format!(
+                        "{{\"id\":\"{}\",\"name\":\"{}\",\"installed\":{},\"version\":\"{}\",\"role\":\"{}\"}}",
+                        json_escape(&c.id),
+                        json_escape(&c.name),
+                        c.installed,
+                        json_escape(&c.version_or_path),
+                        json_escape(&c.role)
+                    )
+                })
+                .collect();
+            let arch_json: Vec<String> = d
+                .arch_matrix
+                .iter()
+                .map(|a| {
+                    format!(
+                        "{{\"arch_code\":\"{}\",\"machine_hex\":\"{}\",\"required_stack\":\"{}\",\"supported_now\":{},\"status_label\":\"{}\",\"notes\":\"{}\"}}",
+                        json_escape(&a.arch_code),
+                        json_escape(&a.machine_hex),
+                        json_escape(&a.required_stack),
+                        a.supported_now,
+                        json_escape(&a.status_label),
+                        json_escape(&a.notes)
+                    )
+                })
+                .collect();
+            let cmds_json: Vec<String> = d
+                .install_commands
+                .iter()
+                .map(|s| format!("\"{}\"", json_escape(s)))
+                .collect();
+            format!(
+                "{{\"status\":\"ok\",\"host_os\":\"{}\",\"host_arch\":\"{}\",\"in_apk_sandbox\":{},\"display_server_active\":{},\"display_endpoint\":\"{}\",\"can_run_x64_pe\":{},\"can_run_x86_pe\":{},\"can_run_arm64_pe\":{},\"can_run_arm64ec_pe\":{},\"blocker_summary\":\"{}\",\"components\":[{}],\"arch_matrix\":[{}],\"install_commands\":[{}]}}",
+                json_escape(&d.host_os),
+                json_escape(&d.host_arch),
+                d.in_apk_sandbox,
+                d.display_server_active,
+                json_escape(&d.display_endpoint),
+                d.can_run_x64_pe,
+                d.can_run_x86_pe,
+                d.can_run_arm64_pe,
+                d.can_run_arm64ec_pe,
+                json_escape(&d.blocker_summary),
+                comps_json.join(","),
+                arch_json.join(","),
+                cmds_json.join(",")
+            )
+        }
+        "wsr_install_runtime" => {
+            let (ok, log) = run_runtime_installer();
+            format!(
+                "{{\"status\":\"ok\",\"installed_ready\":{},\"log\":\"{}\"}}",
+                ok,
+                json_escape(&log)
+            )
+        }
+        "wsr_gui_frame" => {
+            let sid = extract_json_str(raw_args_json, "session_id")
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(0);
+            match capture_x11_frame_base64(sid) {
+                Ok(b64) => format!("{{\"status\":\"ok\",\"frame_base64\":\"{}\"}}", b64),
+                Err(e) => format!("{{\"status\":\"error\",\"error\":\"{}\"}}", json_escape(&e)),
+            }
+        }
         "wsr_list_directory" => {
             let path = extract_json_str(raw_args_json, "path")
                 .unwrap_or_else(|| "C:\\Users\\Admin\\Desktop".to_string());
@@ -218,8 +268,8 @@ pub fn handle_mcp_call(tool_name: &str, raw_args_json: &str) -> String {
                 .iter()
                 .map(|w| {
                     format!(
-                        "{{\"win_id\":{},\"title\":\"{}\",\"width\":{},\"height\":{},\"is_minimized\":{},\"is_maximized\":{}}}",
-                        w.win_id,
+                        "{{\"win_id\":\"{}\",\"title\":\"{}\",\"width\":{},\"height\":{},\"is_minimized\":{},\"is_maximized\":{}}}",
+                        json_escape(&w.win_id),
                         json_escape(&w.title),
                         w.width,
                         w.height,
@@ -229,9 +279,10 @@ pub fn handle_mcp_call(tool_name: &str, raw_args_json: &str) -> String {
                 })
                 .collect();
             format!(
-                "{{\"status\":\"ok\",\"session_id\":{},\"exe_win_path\":\"{}\",\"arch\":\"{}\",\"subsystem\":\"{}\",\"is_gui_subsystem\":{},\"state\":\"{}\",\"status_message\":\"{}\",\"runtime_used\":\"{}\",\"display_bridge_url\":\"{}\",\"windows\":[{}],\"stdout\":\"{}\",\"stderr\":\"{}\",\"exit_code\":{}}}",
+                "{{\"status\":\"ok\",\"session_id\":{},\"exe_win_path\":\"{}\",\"arch_enum\":\"{}\",\"arch\":\"{}\",\"subsystem\":\"{}\",\"is_gui_subsystem\":{},\"state\":\"{}\",\"status_message\":\"{}\",\"runtime_used\":\"{}\",\"display_bridge_url\":\"{}\",\"windows\":[{}],\"stdout\":\"{}\",\"stderr\":\"{}\",\"exit_code\":{}}}",
                 rec.session_id,
                 json_escape(&rec.exe_win_path),
+                json_escape(&rec.arch_enum),
                 json_escape(&rec.arch),
                 json_escape(&rec.subsystem),
                 rec.is_gui_subsystem,
@@ -332,14 +383,16 @@ pub fn handle_mcp_call(tool_name: &str, raw_args_json: &str) -> String {
                         .map(|d| format!("\"{}\"", json_escape(d)))
                         .collect();
                     format!(
-                        "{{\"status\":\"ok\",\"win_path\":\"{}\",\"android_path\":\"{}\",\"pe_status\":\"{}\",\"is_valid_pe\":{},\"is_dll\":{},\"is_console\":{},\"arch\":\"{}\",\"subsystem\":\"{}\",\"entry_point\":\"0x{:08x}\",\"image_base\":\"0x{:x}\",\"is_dotnet\":{},\"runtime_available\":{},\"support_level\":\"{}\",\"support_reason\":\"{}\",\"sections\":[{}],\"imported_dlls\":[{}],\"summary\":\"{}\"}}",
+                        "{{\"status\":\"ok\",\"win_path\":\"{}\",\"android_path\":\"{}\",\"pe_status\":\"{}\",\"is_valid_pe\":{},\"is_dll\":{},\"is_console\":{},\"arch_enum\":\"{}\",\"arch\":\"{}\",\"required_backend\":\"{}\",\"subsystem\":\"{}\",\"entry_point\":\"0x{:08x}\",\"image_base\":\"0x{:x}\",\"is_dotnet\":{},\"runtime_available\":{},\"support_level\":\"{}\",\"support_reason\":\"{}\",\"sections\":[{}],\"imported_dlls\":[{}],\"summary\":\"{}\"}}",
                         json_escape(&win_p),
                         json_escape(&real_p.to_string_lossy()),
                         json_escape(&info.status),
                         info.is_valid_pe,
                         info.is_dll,
                         info.is_console,
+                        json_escape(&info.arch_enum),
                         json_escape(&info.arch),
+                        json_escape(&info.required_backend),
                         json_escape(&info.subsystem),
                         info.entry_point_rva,
                         info.image_base,
@@ -464,7 +517,7 @@ pub fn handle_mcp_call(tool_name: &str, raw_args_json: &str) -> String {
         "wsr_setup_tools" => {
             let _ = vfs.ensure_initialized();
             format!(
-                "{{\"status\":\"ok\",\"vfs_drive_c\":\"{}\",\"vfs_drive_d\":\"{}\",\"vfs_drive_z\":\"{}\",\"message\":\"Windows VFS drives (C:, D:, Z:), SAF Staging Workspace, and built-in Rust Batch/PE/Registry/GUI engines initialized.\"}}",
+                "{{\"status\":\"ok\",\"vfs_drive_c\":\"{}\",\"vfs_drive_d\":\"{}\",\"vfs_drive_z\":\"{}\",\"message\":\"Windows VFS drives (C:, D:, Z:), SAF Staging Workspace, and Rust Batch/PE/Registry/Runtime engines initialized.\"}}",
                 json_escape(&vfs.drive_c.to_string_lossy()),
                 json_escape(&vfs.drive_d.to_string_lossy()),
                 json_escape(&vfs.drive_z.to_string_lossy())

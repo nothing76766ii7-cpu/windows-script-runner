@@ -495,6 +495,19 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, .si:focus-vis
 .ci.red{color:#f85149;}
 .ci.blue{color:var(--accent); font-weight:600;}
 
+
+/* ── RUNTIME DIAGNOSTICS MODAL (Requirement 10) ── */
+.diag-table{
+  width:100%; border-collapse:collapse; font-size:11.5px; margin-bottom:12px;
+}
+.diag-table th, .diag-table td{
+  border:1px solid var(--border); padding:6px 8px; text-align:left; vertical-align:top;
+}
+.diag-table th{background:var(--surface2); color:var(--text2); font-weight:600;}
+.st-ok{color:#3fb950; font-weight:700;}
+.st-miss{color:#f85149; font-weight:700;}
+.st-warn{color:#f59e0b; font-weight:700;}
+
 /* ── DIALOGS ── */
 .overlay{
   position:fixed; inset:0; background:rgba(0,0,0,.58);
@@ -582,7 +595,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, .si:focus-vis
   </button>
   <span class="titlebar-icon" id="ico-app"></span>
   <span class="titlebar-title" id="win-title">Windows Script Runner</span>
-  <span class="rust-pill" id="engine-status">Rust VFS v5.0</span>
+  <span class="rust-pill" id="engine-status">Rust VFS v6.0</span>
 </div>
 
 <!-- RESPONSIVE TOOLBAR WITH OVERFLOW MENU -->
@@ -825,6 +838,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, .si:focus-vis
   <div class="gui-input-bar">
     <button class="gui-key-btn" onclick="sendGuiMouseClick('click')">Left Click</button>
     <button class="gui-key-btn" onclick="sendGuiMouseClick('right_click')">Right Click</button>
+    <button class="gui-key-btn" onclick="sendGuiMouseClick('scroll_up')">Scroll Up</button>
+    <button class="gui-key-btn" onclick="sendGuiMouseClick('scroll_down')">Scroll Dn</button>
+    <button class="gui-key-btn" onclick="sendGuiWindowOp('win_minimize')">Min Win</button>
+    <button class="gui-key-btn" onclick="sendGuiWindowOp('win_maximize')">Max Win</button>
+    <button class="gui-key-btn" onclick="sendGuiWindowOp('win_close')">Close Win</button>
     <button class="gui-key-btn" onclick="sendGuiKey('Tab')">Tab</button>
     <button class="gui-key-btn" onclick="sendGuiKey('Return')">Enter</button>
     <button class="gui-key-btn" onclick="sendGuiKey('Escape')">Esc</button>
@@ -916,6 +934,26 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, .si:focus-vis
     <div class="dlg-footer">
       <button class="btn" onclick="closeInputDlg(null)">Cancel</button>
       <button class="btn pri" id="idlg-ok" onclick="closeInputDlg(document.getElementById('idlg-val').value)">Confirm</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- RUNTIME DIAGNOSTICS & INSTALLER MODAL (Requirement 7 & 10) -->
+<div class="overlay" id="diagdlg" onclick="if(event.target===this)closeDiagModal()">
+  <div class="dlg" style="width:620px">
+    <div class="dlg-title">
+      <span id="diag-icon"></span>
+      <span>EXE Runtime Diagnostics &amp; Architecture Matrix</span>
+      <button class="dlg-close" onclick="closeDiagModal()" aria-label="Close diagnostics">
+        <svg class="ico ico-sm" viewBox="0 0 16 16"><line x1="3.5" y1="3.5" x2="12.5" y2="12.5"/><line x1="12.5" y1="3.5" x2="3.5" y2="12.5"/></svg>
+      </button>
+    </div>
+    <div class="dlg-body" id="diag-body"></div>
+    <div class="dlg-footer">
+      <button class="btn" onclick="copyInstallerCommands()">Copy Termux/Proot Setup Commands</button>
+      <button class="btn pri" id="btn-run-installer" onclick="triggerRuntimeInstaller()">Run Runtime Installer</button>
+      <button class="btn" onclick="closeDiagModal()">Close</button>
     </div>
   </div>
 </div>
@@ -1697,7 +1735,7 @@ async function launchWindowsPeWithGuiFlow(fileObj, stagedWinPath, args) {
     card.style.display = 'none';
     canvas.style.display = 'block';
     renderWindowSwitcher(res.windows);
-    attachCanvasInputBridge(canvas);
+    attachCanvasInputBridge(canvas); startX11FrameLoop(activeGuiSessionId);
   } else {
     renderWindowSwitcher([]);
   }
@@ -1709,7 +1747,7 @@ function renderWindowSwitcher(windows) {
   windows.forEach((w, idx) => {
     const btn = document.createElement('button');
     btn.className = 'gui-win-tab' + (idx === 0 ? ' active' : '');
-    btn.textContent = `${w.title} (${w.width}x${w.height})`;
+    btn.setAttribute('data-win-id', w.win_id); btn.textContent = `${w.title} (${w.width}x${w.height})`; btn.onclick = () => { document.querySelectorAll('.gui-win-tab').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); sendGuiWindowOp('win_focus'); };
     sw.appendChild(btn);
   });
 }
@@ -1805,6 +1843,7 @@ async function terminateCurrentGuiSession() {
 }
 
 function closeGuiView() {
+  stopX11FrameLoop();
   document.getElementById('gui-view').classList.remove('vis');
 }
 
@@ -1853,7 +1892,8 @@ async function openAnalyzeModal(f) {
           <div class="pe-k">Windows Path:</div><div class="pe-v">${esc(pe.win_path)}</div>
           <div class="pe-k">Android Path:</div><div class="pe-v">${esc(pe.android_path)}</div>
           <div class="pe-k">Header Status:</div><div class="pe-v">${esc(pe.pe_status)} (Valid PE: ${pe.is_valid_pe ? 'Yes' : 'No'})</div>
-          <div class="pe-k">Architecture:</div><div class="pe-v">${esc(pe.arch)}</div>
+          <div class="pe-k">Detected Arch:</div><div class="pe-v"><strong>${esc(pe.arch_enum || '')}</strong> — ${esc(pe.arch)}</div>
+          <div class="pe-k">Required Backend:</div><div class="pe-v">${esc(pe.required_backend || '')}</div>
           <div class="pe-k">Subsystem:</div><div class="pe-v">${esc(pe.subsystem)}</div>
           <div class="pe-k">Entry Point:</div><div class="pe-v">${esc(pe.entry_point)} (ImageBase: ${esc(pe.image_base)})</div>
           <div class="pe-k">.NET / CLR:</div><div class="pe-v">${pe.is_dotnet ? 'Yes (Managed CIL)' : 'No (Native Binary)'}</div>
@@ -2031,14 +2071,168 @@ async function exportSelectedToAndroid() {
   }
 }
 
+
+let x11FrameTimer = null;
+let lastDiagData = null;
+
 async function checkEnv() {
-  if (termState === 'collapsed') applyTermState('half');
-  const res = await callRustApi('wsr_check_environment', {});
-  if (res && res.report) {
-    tlog('', 'lo');
-    res.report.split('\n').forEach(l => tlog(l, 'lo'));
+  await openRuntimeDiagnostics();
+}
+
+async function openRuntimeDiagnostics() {
+  document.getElementById('diag-icon').innerHTML = SVGS.checkenv;
+  const body = document.getElementById('diag-body');
+  body.innerHTML = `<div class="empty"><div class="spin"></div><span>Probing installed runtimes, ELF architectures &amp; X11 display server...</span></div>`;
+  document.getElementById('diagdlg').classList.add('vis');
+
+  const d = await callRustApi('wsr_runtime_diagnostics', {});
+  lastDiagData = d;
+  if (d && d.status === 'ok') {
+    renderDiagnosticsContent(d);
+    return;
+  }
+
+  // Fallback diagnostic report when previewed outside the APK
+  const fallback = {
+    host_os: 'android',
+    host_arch: 'aarch64',
+    in_apk_sandbox: true,
+    display_server_active: false,
+    display_endpoint: 'None (Start Xvfb :0 or Termux:X11)',
+    blocker_summary: 'Missing components: box64, wine64 (amd64), Xvfb / X11 display server. Technical Note: Standalone Android APKs run under Bionic libc and SELinux untrusted_app W^X policies (~500 MB glibc + Box64 + Wine64 + Xvfb rootfs is not bundled inside the lightweight APK). Run the Runtime Installer in Termux/proot or provision ~/.wsr_vfs/runtime.',
+    arch_matrix: [
+      { arch_code: 'x64',     machine_hex: '0x8664', required_stack: 'Box64 + Wine64 (amd64)',                  supported_now: false, status_label: 'MISSING RUNTIME',            notes: '64-bit x64 Windows PE binaries require Box64 + Wine64 (amd64).' },
+      { arch_code: 'x86',     machine_hex: '0x014c', required_stack: 'Box86 / Wine WoW64 (i386)',               supported_now: false, status_label: 'MISSING RUNTIME',            notes: '32-bit x86 Windows PE binaries require Wine WoW64 or Box86.' },
+      { arch_code: 'ARM64',   machine_hex: '0xAA64', required_stack: 'Native ARM64 Wine (NOT Box64 + Wine64)',  supported_now: false, status_label: 'MISSING ARM64 WINE',         notes: 'Windows ARM64 binaries CANNOT run under Box64 + Wine64 (x64); they require native wine-arm64.' },
+      { arch_code: 'ARM64EC', machine_hex: '0xA641', required_stack: 'Wine ARM64EC CHPE Hybrid Dispatcher',     supported_now: false, status_label: 'EXPERIMENTAL / UNSUPPORTED', notes: 'Hybrid ARM64EC binaries require CHPE thunking support.' }
+    ],
+    components: [
+      { name: 'Box64 (x86_64-to-ARM64 Translator)', installed: false, version: 'Not installed', role: 'Translates x64 (0x8664) instructions to ARM64.' },
+      { name: 'Wine64 (amd64 PE Loader)',           installed: false, version: 'Not installed', role: 'Loads x64 Windows PE executables under Box64.' },
+      { name: 'Wine ARM64 (aarch64 PE Loader)',     installed: false, version: 'Not installed', role: 'Required exclusively for native Windows ARM64 (0xAA64) binaries.' },
+      { name: 'Xvfb / X11 Display Server (:0)',     installed: false, version: 'Not installed', role: 'Renders Windows GUI client areas and dialogs.' },
+      { name: 'xdotool (X11 Input & Window Mgr)',   installed: false, version: 'Not installed', role: 'Forwards Android touch, scroll, keyboard & window ops.' },
+      { name: 'Built-in Rust Batch & Registry VFS', installed: true,  version: 'v6.0 Built-in', role: 'Executes .bat/.cmd scripts and isolated .reg files natively.' }
+    ],
+    install_commands: [
+      'pkg update -y && pkg install -y x11-repo tur-repo proot-distro xorg-server-xvfb xdotool imagemagick',
+      'pkg install -y box64 wine-stable',
+      'Xvfb :0 -screen 0 800x600x24 & export DISPLAY=:0 && box64 wine64 wineboot --init'
+    ]
+  };
+  lastDiagData = fallback;
+  renderDiagnosticsContent(fallback);
+}
+
+function renderDiagnosticsContent(d) {
+  const body = document.getElementById('diag-body');
+  const archRows = (d.arch_matrix || []).map(a => `
+    <tr>
+      <td><strong>${esc(a.arch_code)}</strong><br><span style="color:var(--text2);font-family:monospace">${esc(a.machine_hex)}</span></td>
+      <td>${esc(a.required_stack)}</td>
+      <td class="${a.supported_now ? 'st-ok' : 'st-miss'}">${esc(a.status_label)}</td>
+      <td>${esc(a.notes)}</td>
+    </tr>`).join('');
+
+  const compRows = (d.components || []).map(c => `
+    <tr>
+      <td><strong>${esc(c.name)}</strong></td>
+      <td class="${c.installed ? 'st-ok' : 'st-miss'}">${c.installed ? 'INSTALLED' : 'MISSING'}</td>
+      <td style="font-family:monospace">${esc(c.version)}</td>
+      <td>${esc(c.role)}</td>
+    </tr>`).join('');
+
+  const cmds = (d.install_commands || []).join('\n');
+
+  body.innerHTML = `
+    <div class="pe-grid">
+      <div class="pe-k">Host OS / ABI:</div><div class="pe-v">${esc(d.host_os)} / ${esc(d.host_arch)} ${d.in_apk_sandbox ? '(Android APK Sandbox)' : ''}</div>
+      <div class="pe-k">X11 Display:</div><div class="pe-v">${esc(d.display_endpoint)}</div>
+    </div>
+    <div class="dlg-warn">${esc(d.blocker_summary)}</div>
+
+    <label class="dlg-label" style="font-weight:700;color:var(--text)">1. PE Architecture Compatibility Matrix (x86 / x64 / ARM64 / ARM64EC)</label>
+    <table class="diag-table">
+      <thead><tr><th>PE Arch</th><th>Required Execution Backend</th><th>Status</th><th>Compatibility Rule</th></tr></thead>
+      <tbody>${archRows}</tbody>
+    </table>
+
+    <label class="dlg-label" style="font-weight:700;color:var(--text)">2. Installed Runtime &amp; Display Components</label>
+    <table class="diag-table">
+      <thead><tr><th>Component</th><th>State</th><th>Version / Path</th><th>Role</th></tr></thead>
+      <tbody>${compRows}</tbody>
+    </table>
+
+    <label class="dlg-label" style="font-weight:700;color:var(--text)">3. Runtime Installation &amp; X11 Display Bootstrap Commands</label>
+    <div class="dlg-preview">${esc(cmds)}</div>`;
+}
+
+function closeDiagModal() {
+  document.getElementById('diagdlg').classList.remove('vis');
+}
+
+function copyInstallerCommands() {
+  const cmds = (lastDiagData?.install_commands || []).join('\n');
+  navigator.clipboard?.writeText(cmds).then(() => tlog('[Copied Box64 + Wine64 + Xvfb installation commands to clipboard]', 'lk'));
+}
+
+async function triggerRuntimeInstaller() {
+  const btn = document.getElementById('btn-run-installer');
+  btn.disabled = true;
+  btn.textContent = 'Running Installer...';
+  const res = await callRustApi('wsr_install_runtime', {});
+  btn.disabled = false;
+  btn.textContent = 'Run Runtime Installer';
+  if (res && res.log) {
+    tlog('\n[RUNTIME INSTALLER]', 'li');
+    res.log.split('\n').forEach(l => tlog(l, res.installed_ready ? 'lk' : 'lw'));
+  }
+  await openRuntimeDiagnostics();
+}
+
+function sendGuiWindowOp(opType) {
+  const activeTab = document.querySelector('.gui-win-tab.active');
+  const winId = activeTab?.getAttribute('data-win-id') || 'root';
+  if (activeGuiSessionId) {
+    callRustApi('wsr_gui_input', {
+      session_id: String(activeGuiSessionId),
+      event_type: opType,
+      x: '0',
+      y: '0',
+      key_or_text: winId
+    });
   }
 }
+
+function startX11FrameLoop(sessionId) {
+  stopX11FrameLoop();
+  const canvas = document.getElementById('gui-canvas');
+  const ctx = canvas.getContext('2d');
+  x11FrameTimer = setInterval(async () => {
+    if (!document.getElementById('gui-view').classList.contains('vis')) {
+      stopX11FrameLoop();
+      return;
+    }
+    const res = await callRustApi('wsr_gui_frame', { session_id: String(sessionId) });
+    if (res && res.status === 'ok' && res.frame_base64) {
+      const img = new Image();
+      img.onload = () => {
+        if (canvas.width !== img.width) canvas.width = img.width;
+        if (canvas.height !== img.height) canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+      };
+      img.src = 'data:image/png;base64,' + res.frame_base64;
+    }
+  }, 450);
+}
+
+function stopX11FrameLoop() {
+  if (x11FrameTimer) {
+    clearInterval(x11FrameTimer);
+    x11FrameTimer = null;
+  }
+}
+
 
 function showHelp() {
   if (termState === 'collapsed') applyTermState('half');
