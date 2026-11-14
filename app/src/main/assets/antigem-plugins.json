@@ -1,0 +1,10 @@
+[
+  {
+    "path": ".",
+    "id": "com.vanta.windows-script-runner",
+    "name": "Windows Script Runner",
+    "version": "1.0.0",
+    "description": "Execute .bat, .cmd, .ps1, .vbs, .reg and other Windows-only scripts on Android. Includes a Windows Explorer-style UI panel with terminal, file browser, and script execution.",
+    "icon": "icon.svg"
+  }
+]

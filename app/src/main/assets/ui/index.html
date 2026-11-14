@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Windows Script Runner</title>
+<style>
+:root {
+  --accent:      #0078d4;
+  --accent-dark: #005a9e;
+  --accent-lite: #cce4f7;
+  --bg:          #f3f3f3;
+  --surface:     #ffffff;
+  --border:      #ddd;
+  --text:        #1a1a1a;
+  --text2:       #666;
+  --sidebar:     #f0f0f0;
+  --hover:       rgba(0,0,0,0.055);
+  --sel:         #cce4f7;
+  --shadow:      0 8px 32px rgba(0,0,0,.14);
+  --r:           6px;
+  --r2:          3px;
+  --term-bg:     #0c0c0c;
+  --term-fg:     #cccccc;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:      #202020;
+    --surface: #2b2b2b;
+    --border:  #3a3a3a;
+    --text:    #f0f0f0;
+    --text2:   #999;
+    --sidebar: #242424;
+    --hover:   rgba(255,255,255,0.065);
+    --sel:     #0a3d6b;
+    --accent-lite: #0a3d6b;
+  }
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;overflow:hidden;}
+body{
+  font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+  font-size:13px; color:var(--text);
+  background:var(--bg);
+  display:flex; flex-direction:column;
+}
+
+/* ── TITLE BAR ── */
+.titlebar{
+  background:var(--surface); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:8px;
+  padding:6px 10px; flex-shrink:0; user-select:none;
+}
+.titlebar-icon{font-size:15px;}
+.titlebar-title{font-size:12px; color:var(--text2); flex:1;}
+.wc{display:flex; gap:1px;}
+.wb{
+  width:44px; height:30px; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; border-radius:3px; font-size:11px; color:var(--text2);
+  transition:background .1s;
+}
+.wb:hover{background:var(--hover);}
+.wb.wc-x:hover{background:#c42b1c; color:#fff;}
+
+/* ── TOOLBAR ── */
+.toolbar{
+  background:var(--surface); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:1px; padding:3px 6px; flex-shrink:0;
+}
+.tb{
+  display:flex; flex-direction:column; align-items:center;
+  padding:3px 7px; cursor:pointer; border-radius:var(--r2);
+  gap:1px; min-width:38px; transition:background .1s;
+}
+.tb:hover{background:var(--hover);}
+.tb.on{background:var(--sel);}
+.tb .i{font-size:15px;}
+.tb .l{font-size:9px; color:var(--text2);}
+.ts{width:1px; height:30px; background:var(--border); margin:0 3px;}
+
+/* ── ADDRESS BAR ── */
+.abar{
+  background:var(--surface); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:6px; padding:4px 8px; flex-shrink:0;
+}
+.nb{
+  width:26px; height:26px; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; border-radius:var(--r2); font-size:13px; color:var(--text2);
+  transition:background .1s; border:none; background:none;
+}
+.nb:hover{background:var(--hover);}
+.nb:disabled{opacity:.3; cursor:default;}
+.pbar{
+  flex:1; display:flex; align-items:center;
+  background:var(--bg); border:1px solid var(--border);
+  border-radius:var(--r2); padding:0 8px; height:26px; cursor:text; overflow:hidden;
+}
+.pinput{
+  width:100%; background:none; border:none; outline:none;
+  font:inherit; font-size:13px; color:var(--text); display:none;
+}
+.bcrumbs{display:flex; align-items:center; gap:1px; overflow:hidden; white-space:nowrap;}
+.crumb{
+  color:var(--text); cursor:pointer; padding:2px 5px;
+  border-radius:3px; font-size:12px; transition:background .1s;
+}
+.crumb:hover{background:var(--hover);}
+.csep{color:var(--text2); font-size:11px;}
+.sbar{
+  display:flex; align-items:center; gap:5px;
+  background:var(--bg); border:1px solid var(--border);
+  border-radius:var(--r2); padding:0 8px; height:26px; width:180px;
+}
+.sbar input{
+  background:none; border:none; outline:none;
+  font:inherit; font-size:12px; color:var(--text); width:100%;
+}
+
+/* ── LAYOUT ── */
+.main{display:flex; flex:1; overflow:hidden;}
+
+/* ── SIDEBAR ── */
+.sidebar{
+  width:185px; background:var(--sidebar); border-right:1px solid var(--border);
+  overflow-y:auto; flex-shrink:0; padding:6px 0;
+}
+.sh{
+  padding:4px 10px; font-size:10px; font-weight:700;
+  color:var(--text2); text-transform:uppercase; letter-spacing:.5px;
+}
+.si{
+  display:flex; align-items:center; gap:7px;
+  padding:5px 10px; cursor:pointer; border-radius:4px; margin:0 3px;
+  transition:background .1s;
+}
+.si:hover{background:var(--hover);}
+.si.on{background:var(--sel);}
+.si .i{font-size:14px; flex-shrink:0;}
+.si .n{font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+
+/* ── CONTENT ── */
+.content{flex:1; display:flex; flex-direction:column; overflow:hidden;}
+.listwrap{flex:1; overflow-y:auto;}
+
+/* ── LIST HEADER ── */
+.lhdr{
+  display:grid; grid-template-columns:1fr 90px 130px 130px;
+  padding:3px 8px; border-bottom:1px solid var(--border);
+  background:var(--surface); position:sticky; top:0; z-index:1;
+}
+.lhdr-col{
+  font-size:11px; color:var(--text2); cursor:pointer;
+  padding:2px 4px; border-radius:3px;
+}
+.lhdr-col:hover{background:var(--hover);}
+
+/* ── FILE ROW ── */
+.frow{
+  display:grid; grid-template-columns:1fr 90px 130px 130px;
+  padding:3px 8px; border-radius:var(--r2); cursor:pointer;
+  align-items:center; transition:background .1s;
+}
+.frow:hover{background:var(--hover);}
+.frow.sel{background:var(--sel);}
+.frow.busy{background:rgba(0,120,212,.13); animation:pulse 1s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.7;}}
+.fname{display:flex; align-items:center; gap:7px; overflow:hidden;}
+.ficon{font-size:15px; flex-shrink:0;}
+.flabel{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.rbadge{
+  background:var(--accent); color:#fff;
+  font-size:8px; padding:1px 3px; border-radius:2px; margin-left:3px;
+  vertical-align:middle;
+}
+.fsize,.ftype,.fdate{font-size:11px; color:var(--text2);}
+
+/* ── TERMINAL ── */
+.term{
+  border-top:1px solid var(--border);
+  background:var(--term-bg); display:flex; flex-direction:column;
+  transition:height .15s ease;
+}
+.term.open{height:220px;}
+.term.shut{height:28px;}
+.thdr{
+  display:flex; align-items:center; gap:7px;
+  padding:4px 8px; background:#1a1a1a; cursor:pointer; flex-shrink:0;
+}
+.thdr span{color:#aaa; font-size:11px;}
+.tout{
+  flex:1; overflow-y:auto; padding:6px 10px;
+  font-family:'Cascadia Code','Consolas',monospace; font-size:12px; line-height:1.6;
+}
+.lo{color:#ccc;}
+.le{color:#f85149;}
+.li{color:#58a6ff;}
+.lk{color:#3fb950;}
+.lw{color:#e3b341;}
+.tinrow{
+  display:flex; align-items:center; padding:3px 8px;
+  border-top:1px solid #2a2a2a; flex-shrink:0;
+}
+.tprompt{color:#58a6ff; font-family:monospace; font-size:12px; margin-right:5px; user-select:none;}
+.tinput{
+  flex:1; background:none; border:none; outline:none;
+  color:#ccc; font-family:'Cascadia Code',monospace; font-size:12px;
+}
+
+/* ── CONTEXT MENU ── */
+.ctxmenu{
+  position:fixed; background:var(--surface);
+  border:1px solid var(--border); border-radius:var(--r);
+  box-shadow:var(--shadow); min-width:195px; z-index:1000;
+  padding:3px 0; display:none;
+}
+.ctxmenu.vis{display:block;}
+.ci{
+  display:flex; align-items:center; gap:9px;
+  padding:6px 12px; cursor:pointer; font-size:12px;
+  transition:background .1s;
+}
+.ci:hover{background:var(--hover);}
+.ci .i{font-size:13px; width:15px; text-align:center;}
+.csep2{height:1px; background:var(--border); margin:3px 0;}
+.ci.red{color:#d13438;}
+.ci.blue{color:var(--accent); font-weight:600;}
+
+/* ── RUN DIALOG ── */
+.overlay{
+  position:fixed; inset:0; background:rgba(0,0,0,.45);
+  z-index:2000; align-items:center; justify-content:center; display:none;
+}
+.overlay.vis{display:flex;}
+.dlg{
+  background:var(--surface); border-radius:var(--r);
+  box-shadow:var(--shadow); width:460px; max-width:95vw; overflow:hidden;
+}
+.dlg-title{
+  background:var(--bg); padding:11px 14px;
+  font-weight:600; font-size:13px;
+  border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:7px;
+}
+.dlg-body{padding:14px;}
+.dlg-info{font-size:12px; color:var(--text2); margin-bottom:8px; word-break:break-all;}
+.dlg-preview{
+  background:var(--bg); border-radius:3px; padding:8px;
+  font-family:monospace; font-size:11px; color:var(--text2);
+  margin-bottom:11px; word-break:break-all; line-height:1.5;
+}
+.dlg-label{font-size:12px; color:var(--text2); display:block; margin-bottom:4px;}
+.dlg-args{
+  width:100%; padding:5px 8px; border:1px solid var(--border);
+  border-radius:var(--r2); background:var(--surface); color:var(--text);
+  font:inherit; outline:none;
+}
+.dlg-footer{
+  padding:10px 14px; display:flex; justify-content:flex-end; gap:7px;
+  border-top:1px solid var(--border);
+}
+.btn{
+  padding:5px 18px; border-radius:var(--r2); cursor:pointer;
+  font:inherit; font-size:12px; border:1px solid var(--border);
+  background:var(--surface); color:var(--text); transition:background .1s;
+}
+.btn:hover{background:var(--hover);}
+.btn.pri{background:var(--accent); color:#fff; border-color:var(--accent);}
+.btn.pri:hover{background:var(--accent-dark);}
+
+/* ── STATUSBAR ── */
+.statbar{
+  background:var(--accent); color:#fff;
+  padding:2px 10px; display:flex; align-items:center; gap:14px;
+  font-size:11px; flex-shrink:0;
+}
+
+/* ── SPINNER ── */
+.empty{
+  display:flex; align-items:center; justify-content:center;
+  height:100%; flex-direction:column; gap:10px; color:var(--text2);
+}
+.spin{
+  width:22px; height:22px; border:2px solid var(--border);
+  border-top-color:var(--accent); border-radius:50%;
+  animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── SCROLLBARS ── */
+::-webkit-scrollbar{width:7px; height:7px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border); border-radius:4px;}
+::-webkit-scrollbar-thumb:hover{background:var(--text2);}
+</style>
+</head>
+<body>
+
+<!-- TITLE BAR -->
+<div class="titlebar">
+  <span class="titlebar-icon">🗂️</span>
+  <span class="titlebar-title" id="win-title">Windows Script Runner — AntiGem Plugin</span>
+  <div class="wc">
+    <div class="wb">─</div>
+    <div class="wb">□</div>
+    <div class="wb wc-x">✕</div>
+  </div>
+</div>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <div class="tb" onclick="goUp()" title="Up (Backspace)"><span class="i">⬆️</span><span class="l">Up</span></div>
+  <div class="tb" onclick="refresh()" title="Refresh (F5)"><span class="i">🔄</span><span class="l">Refresh</span></div>
+  <div class="ts"></div>
+  <div class="tb" id="tb-run" onclick="runSelected()" title="Run selected script"><span class="i">▶️</span><span class="l">Run</span></div>
+  <div class="tb" onclick="openInEditor()" title="Open in AntiGem editor"><span class="i">📝</span><span class="l">Edit</span></div>
+  <div class="tb" onclick="copyPath()" title="Copy full path"><span class="i">📋</span><span class="l">Copy Path</span></div>
+  <div class="tb" onclick="newFolder()" title="New folder"><span class="i">📁</span><span class="l">New Folder</span></div>
+  <div class="ts"></div>
+  <div class="tb" onclick="setupTools()" title="Install helper scripts"><span class="i">🔧</span><span class="l">Setup</span></div>
+  <div class="tb" onclick="checkEnv()" title="Check execution environment"><span class="i">🔍</span><span class="l">Check Env</span></div>
+  <div class="tb" onclick="showHelp()" title="Help"><span class="i">❓</span><span class="l">Help</span></div>
+</div>
+
+<!-- ADDRESS BAR -->
+<div class="abar">
+  <button class="nb" id="nb-back" onclick="goBack()" title="Back">◀</button>
+  <button class="nb" id="nb-fwd"  onclick="goFwd()"  title="Forward">▶</button>
+  <div class="pbar" id="pbar" onclick="focusPath()">
+    <div class="bcrumbs" id="bcrumbs"></div>
+    <input class="pinput" id="pinput" onblur="blurPath()" onkeydown="pathKey(event)">
+  </div>
+  <div class="sbar">
+    <span>🔍</span>
+    <input type="text" id="search" placeholder="Search…" oninput="filterFiles()">
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sh">Quick Access</div>
+    <div class="si on" id="si-home" onclick="nav('~')"><span class="i">🏠</span><span class="n">Home</span></div>
+    <div class="si" onclick="nav('~/Desktop')"><span class="i">🖥️</span><span class="n">Desktop</span></div>
+    <div class="si" onclick="nav('~/Downloads')"><span class="i">⬇️</span><span class="n">Downloads</span></div>
+    <div class="si" onclick="nav('~/Documents')"><span class="i">📄</span><span class="n">Documents</span></div>
+    <div class="si" onclick="nav('~/scripts')"><span class="i">📜</span><span class="n">Scripts</span></div>
+    <div class="si" onclick="nav('~/.antigem_tools')"><span class="i">🔧</span><span class="n">Tools</span></div>
+    <div class="sh">Storage</div>
+    <div class="si" onclick="nav('/sdcard')"><span class="i">📱</span><span class="n">Internal Storage</span></div>
+    <div class="si" onclick="nav('/storage/emulated/0')"><span class="i">💾</span><span class="n">SD Card</span></div>
+    <div class="si" onclick="nav('/tmp')"><span class="i">🗑️</span><span class="n">Temp</span></div>
+    <div class="si" onclick="nav('/')"><span class="i">🌐</span><span class="n">Root /</span></div>
+    <div class="sh">Filter by Type</div>
+    <div class="si" id="f-bat" onclick="setTypeFilter('.bat',this)"><span class="i">⬛</span><span class="n">.bat / .cmd</span></div>
+    <div class="si" id="f-ps1" onclick="setTypeFilter('.ps1',this)"><span class="i">🔷</span><span class="n">.ps1</span></div>
+    <div class="si" id="f-vbs" onclick="setTypeFilter('.vbs',this)"><span class="i">📋</span><span class="n">.vbs</span></div>
+    <div class="si" id="f-reg" onclick="setTypeFilter('.reg',this)"><span class="i">🗝️</span><span class="n">.reg</span></div>
+    <div class="si" id="f-py"  onclick="setTypeFilter('.py',this)"><span class="i">🐍</span><span class="n">.py</span></div>
+    <div class="si" id="f-sh"  onclick="setTypeFilter('.sh',this)"><span class="i">📜</span><span class="n">.sh</span></div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+    <div class="lhdr">
+      <div class="lhdr-col" onclick="sortBy('name')">Name</div>
+      <div class="lhdr-col" onclick="sortBy('size')">Size</div>
+      <div class="lhdr-col" onclick="sortBy('type')">Type</div>
+      <div class="lhdr-col" onclick="sortBy('date')">Modified</div>
+    </div>
+    <div class="listwrap">
+      <div id="filelist">
+        <div class="empty"><div class="spin"></div><span>Loading…</span></div>
+      </div>
+    </div>
+
+    <!-- TERMINAL -->
+    <div class="term open" id="term">
+      <div class="thdr" onclick="toggleTerm()">
+        <span>⬛</span><span id="term-label">Terminal</span>
+        <span style="margin-left:auto;color:#555" id="term-tog">▼</span>
+      </div>
+      <div class="tout" id="tout"></div>
+      <div class="tinrow">
+        <span class="tprompt" id="tprompt">$</span>
+        <input class="tinput" id="tinput" placeholder="Run a command…" onkeydown="termKey(event)" autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div class="statbar">
+  <span id="st-items">0 items</span>
+  <span id="st-sel"></span>
+  <span style="margin-left:auto" id="st-path">~</span>
+</div>
+
+<!-- CONTEXT MENU -->
+<div class="ctxmenu" id="ctxmenu">
+  <div class="ci blue" id="ctx-run" onclick="ctxRun()"><span class="i">▶</span> Run Script</div>
+  <div class="ci" onclick="ctxOpen()"><span class="i">📂</span> Open</div>
+  <div class="ci" onclick="ctxEdit()"><span class="i">📝</span> Edit in IDE</div>
+  <div class="csep2"></div>
+  <div class="ci" onclick="ctxCopyPath()"><span class="i">📋</span> Copy Path</div>
+  <div class="ci" onclick="ctxCopyName()"><span class="i">🏷️</span> Copy Name</div>
+  <div class="ci" onclick="ctxRename()"><span class="i">✏️</span> Rename</div>
+  <div class="csep2"></div>
+  <div class="ci" onclick="ctxProps()"><span class="i">ℹ️</span> Properties</div>
+  <div class="csep2"></div>
+  <div class="ci red" onclick="ctxDelete()"><span class="i">🗑️</span> Delete</div>
+</div>
+
+<!-- RUN DIALOG -->
+<div class="overlay" id="rundlg">
+  <div class="dlg">
+    <div class="dlg-title">
+      <span id="dlg-icon">▶️</span>
+      <span id="dlg-title">Run Script</span>
+    </div>
+    <div class="dlg-body">
+      <div class="dlg-info" id="dlg-info"></div>
+      <div class="dlg-preview" id="dlg-preview"></div>
+      <label class="dlg-label">Arguments (optional):</label>
+      <input class="dlg-args" id="dlg-args" placeholder="--flag value" oninput="updatePreview()">
+    </div>
+    <div class="dlg-footer">
+      <button class="btn" onclick="closeDlg()">Cancel</button>
+      <button class="btn pri" onclick="confirmRun()">▶ Run</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let CWD = '~';
+let hist = ['~'], hIdx = 0;
+let allFiles = [], filtered = [];
+let sel = null;
+let sortF = 'name', sortAsc = true;
+let typeF = null;
+let termOpen = true;
+let pendingFile = null;
+let cmdHist = [], cmdIdx = -1;
+
+// ═══════════════════════════════════════════════════════════════
+// FILE TYPE MAP
+// ═══════════════════════════════════════════════════════════════
+const FT = {
+  '.bat': { icon:'⬛', label:'Windows Batch',       run:true,  strat:'bat' },
+  '.cmd': { icon:'⬛', label:'Windows Cmd Script',  run:true,  strat:'bat' },
+  '.ps1': { icon:'🔷', label:'PowerShell Script',   run:true,  strat:'ps1' },
+  '.vbs': { icon:'📋', label:'VBScript',             run:true,  strat:'vbs' },
+  '.reg': { icon:'🗝️', label:'Registry File',        run:true,  strat:'reg' },
+  '.py':  { icon:'🐍', label:'Python Script',        run:true,  strat:'py'  },
+  '.js':  { icon:'🟡', label:'JavaScript',           run:true,  strat:'js'  },
+  '.sh':  { icon:'📜', label:'Shell Script',         run:true,  strat:'sh'  },
+  '.mjs': { icon:'🟡', label:'ES Module',            run:true,  strat:'js'  },
+  '.exe': { icon:'⚙️', label:'Windows Executable',  run:false, strat:null  },
+  '.msi': { icon:'📦', label:'Windows Installer',   run:false, strat:null  },
+  '.dll': { icon:'🔗', label:'DLL',                  run:false, strat:null  },
+  '.txt': { icon:'📄', label:'Text File',            run:false, strat:null  },
+  '.md':  { icon:'📝', label:'Markdown',             run:false, strat:null  },
+  '.json':{ icon:'📋', label:'JSON',                 run:false, strat:null  },
+  '.xml': { icon:'📋', label:'XML',                  run:false, strat:null  },
+  '.zip': { icon:'🗜️', label:'ZIP Archive',          run:false, strat:null  },
+  '.tar': { icon:'🗜️', label:'TAR Archive',          run:false, strat:null  },
+  '.gz':  { icon:'🗜️', label:'GZ Archive',           run:false, strat:null  },
+  '.log': { icon:'📋', label:'Log File',             run:false, strat:null  },
+  '.ini': { icon:'⚙️', label:'Config File',          run:false, strat:null  },
+  '.cfg': { icon:'⚙️', label:'Config File',          run:false, strat:null  },
+  'dir':  { icon:'📁', label:'Folder',               run:false, strat:null  },
+};
+function ft(name, isDir) {
+  if (isDir) return FT['dir'];
+  const ext = (name.match(/\.[^.]+$/)?.[0]||'').toLowerCase();
+  return FT[ext] || { icon:'📄', label:(ext||'').replace('.','').toUpperCase()+' File', run:false, strat:null };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// COMMAND BUILDER
+// ═══════════════════════════════════════════════════════════════
+function buildCmd(path, strat, args='') {
+  const a = args ? ' '+args : '';
+  const shPath = path.replace(/\.[^.]+$/, '.sh');
+  switch(strat) {
+    case 'bat': return `python3 ~/.antigem_tools/bat2sh.py "${path}" && sh "${shPath}"${a}`;
+    case 'ps1': return `pwsh -File "${path}"${a}`;
+    case 'vbs': return `proot-distro login ubuntu -- wine wscript.exe "${path}"${a}`;
+    case 'reg': return `python3 ~/.antigem_tools/reg_parser.py "${path}"`;
+    case 'py':  return `python3 "${path}"${a}`;
+    case 'js':  return `node "${path}"${a}`;
+    case 'sh':  return `chmod +x "${path}" && sh "${path}"${a}`;
+    default:    return `"${path}"${a}`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TERMINAL
+// ═══════════════════════════════════════════════════════════════
+function tlog(text, cls='lo') {
+  const o = document.getElementById('tout');
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = text;
+  o.appendChild(d);
+  o.scrollTop = o.scrollHeight;
+}
+function tclear() { document.getElementById('tout').innerHTML=''; }
+
+async function exec(cmd, label) {
+  tlog(`$ ${label||cmd}`, 'li');
+  try {
+    // Android Native App Bridge
+    if (typeof window.AndroidBridge !== 'undefined') {
+      return await new Promise(res => {
+        const cbId = 'cb_' + Math.random().toString(36).slice(2);
+        window.__callbacks = window.__callbacks || {};
+        window.__callbacks[cbId] = res;
+        window.__onBridgeResponse = (id, r) => {
+          if (window.__callbacks && window.__callbacks[id]) {
+            if (r?.output) r.output.split('\n').forEach(l => { if(l) tlog(l, l.startsWith('[ERR]')||l.startsWith('[ERROR]')?'le':'lo'); });
+            if (r?.exit !== undefined) tlog(`[Exit: ${r.exit}]`, r.exit===0?'lk':'le');
+            window.__callbacks[id](r);
+            delete window.__callbacks[id];
+          }
+        };
+        window.AndroidBridge.runCommand(cmd, cbId);
+      });
+    }
+    // AntiGem worker bridge
+    if (typeof chrome !== 'undefined' && chrome.runtime) {
+      return await new Promise(res => {
+        chrome.runtime.sendMessage({ type:'RUN_COMMAND', cmd }, r => {
+          if (r?.output) r.output.split('\n').forEach(l => { if(l) tlog(l, l.startsWith('[ERR]')||l.startsWith('[ERROR]')?'le':'lo'); });
+          if (r?.exit !== undefined) tlog(`[Exit: ${r.exit}]`, r.exit===0?'lk':'le');
+          res(r);
+        });
+      });
+    }
+    // window.antigem bridge
+    if (typeof window.antigem !== 'undefined') {
+      const r = await window.antigem.terminal.run(cmd);
+      (r.stdout||'').split('\n').forEach(l => { if(l) tlog(l,'lo'); });
+      (r.stderr||'').split('\n').forEach(l => { if(l) tlog(l,'le'); });
+      tlog(`[Exit: ${r.exitCode??0}]`, (r.exitCode??0)===0?'lk':'le');
+      return r;
+    }
+    // Dev preview
+    tlog(`[PREVIEW — connect AntiGem to execute live]`, 'lw');
+    return { exitCode:0 };
+  } catch(e) {
+    tlog(`[ERROR] ${e.message}`, 'le');
+    return { exitCode:1 };
+  }
+}
+
+async function listDir(path) {
+  const resolved = path.replace('~','$HOME');
+  try {
+    if (typeof window.AndroidBridge !== 'undefined') {
+      const res = window.AndroidBridge.listDirectory(path);
+      const parsed = JSON.parse(res);
+      if (parsed.files) {
+        return parsed.files.map(f => ({
+          name: f.name,
+          isDir: f.isDir,
+          size: f.size,
+          date: new Date(f.lastModified).toISOString().slice(0, 10),
+          path: (path.endsWith('/') ? path : path + '/') + f.name
+        }));
+      }
+    }
+    if (typeof chrome !== 'undefined' && chrome.runtime) {
+      return await new Promise(res => {
+        chrome.runtime.sendMessage({ type:'LIST_DIR', path:resolved }, r => res(parseLS(r?.raw||'', resolved)));
+      });
+    }
+    if (typeof window.antigem !== 'undefined') {
+      const r = await window.antigem.terminal.run(`ls -la "${resolved}" 2>&1`);
+      return parseLS(r.stdout||'', resolved);
+    }
+    return mockFiles(path);
+  } catch { return mockFiles(path); }
+}
+
+function parseLS(raw, base) {
+  return raw.split('\n')
+    .filter(l => l && !l.startsWith('total') && l !== '__NODIR__')
+    .map(line => {
+      const p = line.trim().split(/\s+/);
+      if (p.length < 9) return null;
+      const name = p.slice(8).join(' ');
+      if (name==='.'||name==='..') return null;
+      return { name, path:`${base}/${name}`, isDir:p[0].startsWith('d'),
+               size:parseInt(p[4])||0, modified:`${p[5]} ${p[6]} ${p[7]}`, perms:p[0] };
+    }).filter(Boolean);
+}
+
+function mockFiles(p) {
+  return [
+    { name:'scripts',         path:p+'/scripts',         isDir:true,  size:0,     modified:'Nov 10 09:00', perms:'drwxr-xr-x' },
+    { name:'deploy.bat',      path:p+'/deploy.bat',      isDir:false, size:1240,  modified:'Nov 12 14:32', perms:'-rw-r--r--' },
+    { name:'setup.ps1',       path:p+'/setup.ps1',       isDir:false, size:3892,  modified:'Nov 11 10:15', perms:'-rw-r--r--' },
+    { name:'install.vbs',     path:p+'/install.vbs',     isDir:false, size:752,   modified:'Nov 09 16:44', perms:'-rw-r--r--' },
+    { name:'registry.reg',    path:p+'/registry.reg',    isDir:false, size:320,   modified:'Nov 08 11:22', perms:'-rw-r--r--' },
+    { name:'build.sh',        path:p+'/build.sh',        isDir:false, size:890,   modified:'Nov 13 08:50', perms:'-rwxr-xr-x' },
+    { name:'process.py',      path:p+'/process.py',      isDir:false, size:2104,  modified:'Nov 14 07:30', perms:'-rw-r--r--' },
+    { name:'config.json',     path:p+'/config.json',     isDir:false, size:456,   modified:'Nov 06 20:10', perms:'-rw-r--r--' },
+    { name:'README.md',       path:p+'/README.md',       isDir:false, size:1800,  modified:'Nov 05 12:00', perms:'-rw-r--r--' },
+    { name:'app.exe',         path:p+'/app.exe',         isDir:false, size:102400,modified:'Oct 28 09:30', perms:'-rw-r--r--' },
+    { name:'update.msi',      path:p+'/update.msi',      isDir:false, size:5120000,modified:'Oct 20 13:00',perms:'-rw-r--r--' },
+  ];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════════
+async function nav(path, push=true) {
+  CWD = path;
+  if (push) { hist = hist.slice(0,hIdx+1); hist.push(path); hIdx = hist.length-1; }
+  document.getElementById('st-path').textContent = path;
+  document.getElementById('tprompt').textContent = path.split('/').pop()+'$';
+  renderCrumbs(path);
+  updateNavBtns();
+  activateSidebar(path);
+
+  document.getElementById('filelist').innerHTML = `<div class="empty"><div class="spin"></div><span>Loading…</span></div>`;
+  try {
+    allFiles = await listDir(path);
+    renderFiles();
+  } catch(e) {
+    document.getElementById('filelist').innerHTML = `<div class="empty"><span style="color:#d13438">Error: ${e.message}</span></div>`;
+  }
+}
+
+function renderCrumbs(path) {
+  const bc = document.getElementById('bcrumbs');
+  const parts = path.replace('~','Home').split('/').filter(Boolean);
+  bc.innerHTML = '';
+  let acc = path.startsWith('~') ? '~' : '';
+  parts.forEach((p,i) => {
+    if (i>0 || !path.startsWith('~')) acc += '/'+p;
+    const c = document.createElement('span'); c.className='crumb'; c.textContent=p;
+    const cap=acc; c.onclick=e=>{e.stopPropagation();nav(cap);};
+    bc.appendChild(c);
+    if (i<parts.length-1) { const s=document.createElement('span'); s.className='csep'; s.textContent=' › '; bc.appendChild(s); }
+  });
+}
+
+function activateSidebar(path) {
+  document.querySelectorAll('.si').forEach(el => el.classList.remove('on'));
+}
+
+function goBack()   { if(hIdx>0){ hIdx--; nav(hist[hIdx],false); }}
+function goFwd()    { if(hIdx<hist.length-1){ hIdx++; nav(hist[hIdx],false); }}
+function goUp()     { const p=CWD.split('/'); if(p.length>1) nav(p.slice(0,-1).join('/')||'/'); }
+function refresh()  { nav(CWD,false); }
+
+function updateNavBtns() {
+  document.getElementById('nb-back').disabled = hIdx<=0;
+  document.getElementById('nb-fwd').disabled  = hIdx>=hist.length-1;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER FILES
+// ═══════════════════════════════════════════════════════════════
+function renderFiles() {
+  const list = document.getElementById('filelist');
+  const q = document.getElementById('search').value.toLowerCase();
+  let files = [...allFiles];
+  if (typeF) files = files.filter(f => f.name.toLowerCase().endsWith(typeF));
+  if (q) files = files.filter(f => f.name.toLowerCase().includes(q));
+  files.sort((a,b) => {
+    if (a.isDir!==b.isDir) return a.isDir?-1:1;
+    let va=a[sortF]||'', vb=b[sortF]||'';
+    if(sortF==='size'){va=a.size;vb=b.size;}
+    const c = typeof va==='string' ? va.localeCompare(vb) : va-vb;
+    return sortAsc ? c : -c;
+  });
+  filtered = files;
+
+  if (!files.length) {
+    list.innerHTML=`<div class="empty"><span>No files found</span></div>`;
+    document.getElementById('st-items').textContent='0 items';
+    return;
+  }
+
+  list.innerHTML='';
+  files.forEach((f,i) => {
+    const type = ft(f.name, f.isDir);
+    const row  = document.createElement('div');
+    row.className = 'frow'; row.dataset.i = i;
+    const badge = type.run ? '<span class="rbadge">RUN</span>' : '';
+    row.innerHTML = `
+      <div class="fname"><span class="ficon">${type.icon}</span><span class="flabel">${esc(f.name)}${badge}</span></div>
+      <span class="fsize">${f.isDir?'':fmtSize(f.size)}</span>
+      <span class="ftype">${type.label}</span>
+      <span class="fdate">${f.modified||''}</span>`;
+    row.onclick = () => pick(f, row);
+    row.ondblclick = () => openFile(f);
+    row.oncontextmenu = e => { e.preventDefault(); pick(f,row); showCtx(e,f); };
+    list.appendChild(row);
+  });
+  document.getElementById('st-items').textContent = `${files.length} item${files.length!==1?'s':''}`;
+}
+
+function pick(f, el) {
+  document.querySelectorAll('.frow.sel').forEach(e=>e.classList.remove('sel'));
+  el.classList.add('sel'); sel=f;
+  document.getElementById('st-sel').textContent = `"${f.name}" selected`;
+}
+
+function openFile(f) {
+  if (f.isDir) { nav(f.path); return; }
+  const type = ft(f.name, false);
+  if (type.run && type.strat) showDlg(f, type);
+  else if (!type.run && /\.(exe|msi|dll)$/i.test(f.name)) tlog(`⚠ ${f.name} is a Windows binary — cannot run on Android.`, 'le');
+  else viewFile(f);
+}
+
+function fmtSize(b) {
+  if (!b) return '';
+  if (b<1024) return b+' B';
+  if (b<1048576) return (b/1024).toFixed(1)+' KB';
+  return (b/1048576).toFixed(1)+' MB';
+}
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ═══════════════════════════════════════════════════════════════
+// RUN DIALOG
+// ═══════════════════════════════════════════════════════════════
+function showDlg(f, type) {
+  pendingFile = f;
+  document.getElementById('dlg-icon').textContent  = type.icon;
+  document.getElementById('dlg-title').textContent = `Run ${type.label}`;
+  document.getElementById('dlg-info').textContent  = f.path;
+  document.getElementById('dlg-args').value = '';
+  updatePreview();
+  document.getElementById('rundlg').classList.add('vis');
+}
+
+function updatePreview() {
+  if (!pendingFile) return;
+  const type = ft(pendingFile.name, false);
+  const args = document.getElementById('dlg-args').value;
+  document.getElementById('dlg-preview').textContent = buildCmd(pendingFile.path, type.strat, args);
+}
+
+function closeDlg() { document.getElementById('rundlg').classList.remove('vis'); pendingFile=null; }
+
+async function confirmRun() {
+  if (!pendingFile) return;
+  const f = pendingFile, type = ft(f.name, false);
+  const args = document.getElementById('dlg-args').value;
+  closeDlg();
+  if (!termOpen) toggleTerm();
+  tlog(`\n▶ ${f.name}`, 'li');
+  const idx = filtered.indexOf(f);
+  const rows = document.querySelectorAll('.frow');
+  if (idx>=0) rows[idx]?.classList.add('busy');
+  const cmd = buildCmd(f.path, type.strat, args);
+  await exec(cmd, `${(type.strat||'').toUpperCase()} → ${f.name}`);
+  if (idx>=0) rows[idx]?.classList.remove('busy');
+}
+
+async function viewFile(f) {
+  tlog(`\n📄 ${f.name}`, 'li');
+  await exec(`head -100 "${f.path}" 2>&1`, `cat ${f.name}`);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TOOLBAR
+// ═══════════════════════════════════════════════════════════════
+function runSelected() {
+  if (!sel) { tlog('No file selected.','le'); return; }
+  const type = ft(sel.name, sel.isDir);
+  if (type.run) showDlg(sel, type);
+  else tlog(`${sel.name} is not a runnable script.`,'lw');
+}
+
+function openInEditor() {
+  if (!sel) return;
+  window.antigem?.openFile?.(sel.path);
+  tlog(`Open in IDE: ${sel.path}`, 'li');
+}
+
+function copyPath() {
+  if (!sel) return;
+  navigator.clipboard?.writeText(sel.path).then(()=>tlog(`Copied: ${sel.path}`,'lk'));
+}
+
+async function newFolder() {
+  const name = prompt('Folder name:');
+  if (!name) return;
+  await exec(`mkdir -p "${CWD}/${name}"`, `mkdir ${name}`);
+  refresh();
+}
+
+async function setupTools() {
+  tlog('\n🔧 Installing helper tools…','li');
+  const cmds = [
+    `mkdir -p ~/.antigem_tools`,
+    `chmod +x ~/.antigem_tools/bat2sh.py ~/.antigem_tools/reg_parser.py 2>/dev/null; echo "tools ready"`,
+    `pkg install powershell -y 2>/dev/null && echo "PowerShell: installed" || echo "PowerShell: pkg unavailable — download ARM64 binary from GitHub"`,
+    `pkg install proot-distro -y 2>/dev/null && echo "proot-distro: OK" || echo "proot-distro: install manually"`,
+  ];
+  for (const c of cmds) await exec(c);
+  tlog('✅ Setup complete','lk');
+}
+
+async function checkEnv() {
+  tlog('\n🔍 Environment check…','li');
+  await exec([
+    'echo "--- sh ---" && sh --version 2>&1 | head -1 || echo missing',
+    'echo "--- python3 ---" && python3 --version || echo missing',
+    'echo "--- node ---" && node --version || echo missing',
+    'echo "--- pwsh ---" && pwsh --version 2>/dev/null || echo "not installed (pkg install powershell)"',
+    'echo "--- wine ---" && proot-distro login ubuntu -- wine --version 2>/dev/null || echo "not installed (proot-distro login ubuntu -- apt install wine)"',
+    'echo "--- tools ---" && ls ~/.antigem_tools/ 2>/dev/null || echo "run Setup first"',
+  ].join(' && '), 'env check');
+}
+
+function showHelp() {
+  tclear();
+  tlog('Windows Script Runner — AntiGem Plugin','li');
+  tlog('────────────────────────────────────────','li');
+  tlog('.bat / .cmd  → Transpiled to sh (bat2sh.py) then run via /bin/sh','lo');
+  tlog('.ps1         → PowerShell Core ARM64 (pkg install powershell)','lo');
+  tlog('.vbs         → Wine wscript.exe via proot-distro Ubuntu','lo');
+  tlog('.reg         → Parsed: env vars applied to ~/.bashrc, rest reported','lo');
+  tlog('.py          → python3 direct','lo');
+  tlog('.js / .mjs   → node direct','lo');
+  tlog('.sh          → /bin/sh direct','lo');
+  tlog('.exe / .msi  → Cannot run (Windows binary)','lw');
+  tlog('────────────────────────────────────────','li');
+  tlog('Keyboard: F5=Refresh, Backspace=Back, F2=Edit path, Del=Delete','lo');
+  tlog('Toolbar → Setup to install helper scripts','lo');
+  tlog('Double-click any script to run it','lo');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONTEXT MENU
+// ═══════════════════════════════════════════════════════════════
+function showCtx(e, f) {
+  const m = document.getElementById('ctxmenu');
+  const type = ft(f.name, f.isDir);
+  document.getElementById('ctx-run').style.display = type.run ? 'flex':'none';
+  m.style.left = Math.min(e.clientX, innerWidth-210)+'px';
+  m.style.top  = Math.min(e.clientY, innerHeight-240)+'px';
+  m.classList.add('vis');
+}
+function hideCtx() { document.getElementById('ctxmenu').classList.remove('vis'); }
+function ctxRun()      { hideCtx(); runSelected(); }
+function ctxOpen()     { hideCtx(); if(sel) openFile(sel); }
+function ctxEdit()     { hideCtx(); openInEditor(); }
+function ctxCopyPath() { hideCtx(); copyPath(); }
+function ctxCopyName() { hideCtx(); if(sel) navigator.clipboard?.writeText(sel.name).then(()=>tlog(`Copied: ${sel.name}`,'lk')); }
+async function ctxRename() {
+  hideCtx();
+  if (!sel) return;
+  const n = prompt('New name:', sel.name);
+  if (!n||n===sel.name) return;
+  await exec(`mv "${sel.path}" "${CWD}/${n}"`, `rename → ${n}`);
+  refresh();
+}
+function ctxProps() {
+  hideCtx(); if(!sel) return;
+  const type=ft(sel.name,sel.isDir);
+  tlog(`\nProperties: ${sel.name}`,'li');
+  tlog(`  Path:        ${sel.path}`,'lo');
+  tlog(`  Type:        ${type.label}`,'lo');
+  tlog(`  Size:        ${fmtSize(sel.size)||'—'}`,'lo');
+  tlog(`  Modified:    ${sel.modified||'—'}`,'lo');
+  tlog(`  Permissions: ${sel.perms||'—'}`,'lo');
+  tlog(`  Runnable:    ${type.run?'Yes ('+type.strat+')':'No'}`,'lo');
+}
+async function ctxDelete() {
+  hideCtx(); if(!sel) return;
+  if(!confirm(`Delete "${sel.name}"? This cannot be undone.`)) return;
+  await exec(`rm -rf "${sel.path}"`, `delete ${sel.name}`);
+  sel=null; refresh();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TERMINAL INPUT
+// ═══════════════════════════════════════════════════════════════
+async function termKey(e) {
+  const inp = document.getElementById('tinput');
+  if (e.key==='Enter') {
+    const cmd = inp.value.trim(); if(!cmd) return;
+    cmdHist.unshift(cmd); cmdIdx=-1; inp.value='';
+    if (/^cd(\s+.*)?$/.test(cmd)) {
+      const t=(cmd.slice(2).trim()||'~');
+      nav(t.startsWith('/')||t.startsWith('~') ? t : CWD+'/'+t); return;
+    }
+    if (cmd==='ls'||cmd==='dir') { refresh(); return; }
+    if (cmd==='clear'||cmd==='cls') { tclear(); return; }
+    await exec(cmd);
+    if (/^(rm|mkdir|mv|cp|touch)\s/.test(cmd)) refresh();
+  }
+  if (e.key==='ArrowUp'){ e.preventDefault(); if(cmdIdx<cmdHist.length-1){cmdIdx++;inp.value=cmdHist[cmdIdx];} }
+  if (e.key==='ArrowDown'){ e.preventDefault(); if(cmdIdx>0){cmdIdx--;inp.value=cmdHist[cmdIdx];}else{cmdIdx=-1;inp.value='';} }
+  if (e.key==='Tab'){ e.preventDefault(); /* autocomplete stub */ }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TERMINAL TOGGLE
+// ═══════════════════════════════════════════════════════════════
+function toggleTerm() {
+  termOpen=!termOpen;
+  document.getElementById('term').className='term '+(termOpen?'open':'shut');
+  document.getElementById('term-tog').textContent=termOpen?'▼':'▲';
+  document.getElementById('term-label').textContent=termOpen?'Terminal':'Terminal (click to expand)';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ADDRESS BAR
+// ═══════════════════════════════════════════════════════════════
+function focusPath() {
+  document.getElementById('bcrumbs').style.display='none';
+  const inp=document.getElementById('pinput');
+  inp.style.display='block'; inp.value=CWD; inp.focus(); inp.select();
+}
+function blurPath() {
+  document.getElementById('bcrumbs').style.display='flex';
+  document.getElementById('pinput').style.display='none';
+}
+function pathKey(e) {
+  if(e.key==='Enter'){ nav(document.getElementById('pinput').value.trim()); document.getElementById('pinput').blur(); }
+  if(e.key==='Escape') document.getElementById('pinput').blur();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FILTERS
+// ═══════════════════════════════════════════════════════════════
+function filterFiles() { renderFiles(); }
+function sortBy(f) { if(sortF===f) sortAsc=!sortAsc; else{sortF=f;sortAsc=true;} renderFiles(); }
+function setTypeFilter(ext, el) {
+  typeF = typeF===ext ? null : ext;
+  document.querySelectorAll('[id^="f-"]').forEach(e=>e.classList.remove('on'));
+  if (typeF) el.classList.add('on');
+  renderFiles();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GLOBAL EVENTS
+// ═══════════════════════════════════════════════════════════════
+document.addEventListener('click', e => {
+  if (!document.getElementById('ctxmenu').contains(e.target)) hideCtx();
+});
+document.addEventListener('keydown', e => {
+  if (document.activeElement===document.getElementById('tinput')||
+      document.activeElement===document.getElementById('pinput')||
+      document.activeElement===document.getElementById('search')) return;
+  if (e.key==='F5')        { e.preventDefault(); refresh(); }
+  if (e.key==='Backspace') { goBack(); }
+  if (e.key==='F2')        { focusPath(); }
+  if (e.key==='Delete'&&sel) { ctxDelete(); }
+  if (e.key==='Escape')    { closeDlg(); hideCtx(); }
+  if (e.key==='Enter'&&sel) { openFile(sel); }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+nav('~');
+setTimeout(()=>{
+  tlog('Windows Script Runner ready.','lk');
+  tlog('→ Toolbar → Setup to install bat2sh + reg_parser','li');
+  tlog('→ Toolbar → Check Env to verify pwsh / wine availability','li');
+  tlog('→ Double-click any script to execute it','li');
+  tlog('→ Type commands directly in this terminal','li');
+}, 400);
+</script>
+</body>
+</html>
