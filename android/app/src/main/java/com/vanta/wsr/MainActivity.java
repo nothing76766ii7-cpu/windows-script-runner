@@ -92,7 +92,7 @@ public class MainActivity extends Activity {
             File driveC = new File(vfsRoot, "drive_c");
             File destDir = new File(driveC, "Users/Admin/Downloads");
             if (pendingSafTargetWinDir.toUpperCase().startsWith("C:\\")) {
-                String rel = pendingSafTargetWinDir.substring(3).replace('\', '/');
+                String rel = pendingSafTargetWinDir.substring(3).replace('\\', '/');
                 if (!rel.isEmpty()) {
                     destDir = new File(driveC, rel);
                 }
@@ -114,7 +114,7 @@ public class MainActivity extends Activity {
             final String winPath = pendingSafTargetWinDir.replaceAll("[\\\\/]+$", "") + "\\" + fileName;
             runOnUiThread(() -> {
                 if (webView != null) {
-                    String escaped = winPath.replace("\", "\\").replace("'", "\'");
+                    String escaped = winPath.replace("\\", "\\\\").replace("'", "\\'");
                     webView.evaluateJavascript("window.onSafFileImported && window.onSafFileImported('" + escaped + "')", null);
                 }
             });
